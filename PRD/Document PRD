@@ -1,0 +1,615 @@
+# SHIKSHARTHI OS
+## Product Requirements Document (PRD) — v1.5
+### Merged: Base PRD (v1.0) + Operational Rules & Lifecycle Addendum + Branch Architecture + Schema Appendix
+
+> **Changelog v1.4 → v1.5**
+> - **Corrected:** Head of Shiksharthi is **not a user of the webapp** — no account, login, or role exists for them in this system. Alerts (fee/attendance) are visible only to the existing in-app roles (Director, Mentor, Admin per the Permission Matrix, Section 7). Whoever sees an alert in-app reports it to the Head of Shiksharthi **manually, outside the system** (call, message, in person), and the Head of Shiksharthi is the one who ultimately follows up with parents — entirely outside Shiksharthi OS's scope.
+
+> **Changelog v1.3 → v1.4**
+> - Clarified that Shiksharthi OS never contacts parents directly. Module 12 renamed to **Internal Fee & Attendance Alert System** — it raises alerts for in-app staff; follow-up with parents happens manually, outside the system. This fully resolves the earlier no-mobile-number blocker and removes WhatsApp Integration from scope (Section 11).
+
+> **Changelog v1.2 → v1.3**
+> - Implemented the `Student` ↔ `Enrollment` split as a full schema (Appendix A.4) — permanent identity vs. one record per student per academic year.
+> - **Removed mobile number fields entirely** (student's and parent's) per Director instruction — flagged the downstream impact on Module 12 (Fee Reminders) and Phase 2 WhatsApp Notifications, which currently have no contact channel without it (see Open Item 8).
+
+> **Changelog v1.1 → v1.2**
+> - **New requirement: `branch` added as a cross-cutting field**, alongside `academic_year`, across all relevant entities. Driven by the fact that Shiksharthi operates 3 branches (Pubali, Baguipara, Chinar Park) with different class ranges, and the system is being built for Baguipara first but must not assume single-branch forever.
+> - Confirmed: User Management and System Settings are **Director-only** (corrected from a drafting error in the addendum).
+
+> **Changelog v1.0 → v1.1**
+> - Merged the Operational Rules & Lifecycle Management addendum into the base PRD.
+> - Updated Permission Matrix (Rooms, Attendance, Results — Admin gains Edit for front-desk speed).
+> - Added full Student Lifecycle Management section (statuses, transfers, promotion, leave, dropout, completion).
+> - Added Financial Rules (pending Director finalization), Room Sharing Rules, Extra Class Tracking as first-class entity, revised Attendance Rules (session-driven model), Syllabus Master (future), Report Card Approval Workflow.
+> - Added `academic_year` field across all relevant entities.
+
+---
+
+## 1. Product Overview
+
+Shiksharthi OS is an internal coaching institute management platform designed for:
+- Admins (receptionists)
+- Mentors
+- Directors
+
+The platform serves as the single source of truth for all academic and operational activities across Shiksharthi's branches.
+
+The objective is to eliminate dependency on:
+- WhatsApp messages
+- Excel sheets
+- Physical registers
+- Manual fee tracking
+- Manual report card generation
+
+The system should be accessible from mobile phones, tablets, laptops, and desktop computers through a single responsive web application.
+
+---
+
+## 2. `academic_year` — Cross-Cutting Field
+
+**Problem this solves:** Without a year boundary, promoting Class 11 students to Class 12 the following year has no clean way to separate "this year's data" from "last year's data" — attendance, exams, and chapter progress would bleed across years, and a student's history would become ambiguous the moment they're promoted or repeat a year.
+
+**Rule:** Every record that is time-bound to a specific academic session must carry an `academic_year` field.
+
+**Format:** `YYYY–YY` (e.g., `2026–27`, `2027–28`), stored as a string or as a foreign key to an `AcademicYear` reference table (recommended — see below).
+
+### Entities that must carry `academic_year`
+
+| Entity | Why |
+|---|---|
+| **Students** | A student's *enrollment* is year-specific (see Class Promotion below) — a student may have one enrollment record per academic year they're active in. |
+| **Batches** | Batches are recreated/renamed each year (e.g., "12 JEE A" in 2026–27 is a different batch instance from "12 JEE A" in 2027–28, even if the name repeats). |
+| **Schedule** | Weekly recurring schedules are year-specific; a Monday 5–7 PM slot in one year doesn't imply anything about the next. |
+| **Attendance** | Required to compute "Monthly Attendance" and "% Attendance" correctly within a single year, and to prevent cross-year contamination when a student is promoted mid-record. |
+| **Exams** | Exam history must be queryable per year (e.g., "show me this student's Class 11 exam history" vs. "Class 12"). |
+| **Results** | Same as Exams — rank/percentage comparisons should never mix across years. |
+| **Report Cards** | Report cards are explicitly monthly-within-a-year documents; year must be part of the record and the filename/PDF metadata. |
+| **Fees** | Package fees, installment schedules, and due amounts reset/re-configure each academic year (a promoted student gets a *new* fee structure — see Class Promotion rules). |
+
+### Recommended implementation note
+Rather than a free-text string repeated everywhere, create a single **`AcademicYear` reference table** (`id`, `label` e.g. `2026–27`, `start_date`, `end_date`, `is_current`) and have every entity above store a foreign key to it. This gives you:
+- A single place to roll over to a new year (set `is_current = true` on the new row).
+- Cheap year-over-year reporting (`WHERE academic_year_id = ...`) without string-parsing.
+- A natural hook for the Class Promotion workflow (Section 5.3) to spin up new enrollment, batch, and fee records tied to the new year while leaving last year's records untouched.
+
+---
+
+## 3. `branch` — Cross-Cutting Field (New in v1.2)
+
+**Context:** Shiksharthi currently operates (or will operate) **3 branches**:
+
+| Branch | Classes Offered |
+|---|---|
+| Pubali | 7–10 |
+| Baguipara | 11–12 |
+| Chinar Park | 7–10 |
+
+**Build sequencing:** The system is being built for **Baguipara only** right now. That's a fine MVP scoping decision — but it must not be a *hardcoded* one. If `branch` isn't modeled as a first-class field from day one, every entity (students, batches, rooms, faculty assignments, fees, schedules) will need to be retrofitted later, and historical Baguipara-only data will need a risky backfill migration to attach it to a branch. Modeling it now costs very little; bolting it on later costs a migration project.
+
+**Rule:** Every entity that is currently scoped to "the institute" should instead be scoped to "a branch within the institute."
+
+### Recommended implementation note
+Create a **`Branch` reference table** (`id`, `name`, `address`, `class_range`, `is_active`) with rows for Pubali, Baguipara, and Chinar Park (the other two can be marked `is_active = false` or simply unused until rollout — no need to build their workflows yet, just reserve the structural slot).
+
+### Entities that must carry `branch_id`
+
+| Entity | Why |
+|---|---|
+| **Students** | A student belongs to one branch (enrollment is branch-specific, just as it's year-specific). |
+| **Batches** | Batch names can repeat across branches in theory (though with today's class ranges, "12 JEE A" only exists at Baguipara) — branch scoping prevents ambiguity and future-proofs against name collisions if Pubali/Chinar Park ever add senior-secondary batches. |
+| **Rooms** | Room numbers (0–7) are **local to Baguipara**. Pubali and Chinar Park will have their own room numbering/capacity sets. Without `branch_id` on Room, a "Room 3" lookup is meaningless once a second branch is added. |
+| **Schedule** | A weekly slot is branch + room + batch specific. |
+| **Faculty** | Faculty may be branch-exclusive or may teach across branches (e.g., a Physics mentor splitting time between Baguipara and Chinar Park) — model as a many-to-many `FacultyBranchAssignment`, not a single field, so cross-branch faculty aren't a special case later. |
+| **Fees** | Package pricing is very likely to differ by branch and by class range (a Class 8 fee structure has nothing to do with a Class 12 JEE package). |
+| **User Accounts (Admin/Mentor)** | Reception staff and mentors are realistically tied to a physical location. Each user account should have a **home branch** (or a list of branches they're permitted to access). Director accounts should default to **all branches**. |
+
+### Permission implication (ties into Section 7)
+Once a second branch goes live, Admin and Mentor visibility should default to **their assigned branch only** — a Pubali receptionist should not see Baguipara fee data by default. Director remains the only role with cross-branch visibility out of the box. This should be modeled as a `branch_id` (or `branch_ids[]`) on the user record, checked alongside the existing role-based permission flags (Section 7) — i.e., access = role permission **AND** branch match.
+
+### Academic structure is NOT shared across branches
+This is the part most likely to cause confusion if missed: the **Class 11–12 / JEE–NEET–Boards package structure documented in Section 4 is entirely a Baguipara concept.** Pubali and Chinar Park serve Classes 7–10, which almost certainly need a different model entirely:
+- Different subject set (likely no separate JEE/NEET packages at the middle-school level — possibly a single standard curriculum per class, e.g. Class 8: English, Math, Science, Social Studies).
+- Different batch-naming convention (e.g., "Class 8 A" rather than "12 JEE A").
+- Possibly no "package" concept at all — flat per-class fee instead of JEE/NEET/Boards package logic.
+
+**Recommendation:** Don't try to force-fit the Baguipara JEE/NEET package model onto Classes 7–10 when those branches are built. Treat "Academic Structure" (Section 4) as **branch-specific configuration**, not a single global structure — i.e., `Class`, `Batch`, `Subject`, and `Package` should all be scoped under a branch, even though only Baguipara's is defined today.
+
+---
+
+## 4. Current Academic Structure
+*(Scope: Baguipara branch only — see Section 3 for why Pubali/Chinar Park will need their own version of this section.)*
+
+### Classes
+- Class 11
+- Class 12
+
+### Batches
+**Class 11**
+- 11 JEE
+- 11 NEET
+- 11 Boards
+
+**Class 12**
+- 12 JEE A
+- 12 JEE B
+- 12 NEET
+- 12 Boards
+
+*(Reminder: each of the above is scoped per `academic_year` (Section 2) and per `branch` — currently Baguipara only (Section 3).)*
+
+### Subjects (Core)
+- Physics
+- Chemistry
+- Mathematics
+- Biology
+- Computer Science
+
+### Package Logic
+
+**JEE Package** — Includes Physics, Chemistry, Mathematics. Optional add-ons: Biology, Computer Science (additional charges apply).
+
+**NEET Package** — Includes Physics, Chemistry, Biology. Optional add-ons: Mathematics, Computer Science (additional charges apply).
+
+**Boards** — Students enroll subject-wise. No package structure.
+
+> **Still open:** Actual package fee amounts and add-on pricing are not yet specified — required before Module 11 (Fee Management) can be built. Pending Director sign-off via the future **Fee Policy module** (Section 9).
+
+---
+
+## 5. Student Lifecycle Management
+
+Students are **not permanently active**. Every student must carry a status, and **student records are never deleted** — historical data must always remain accessible.
+
+### 5.1 Student Statuses
+- Active
+- Leave of Absence
+- Batch Transfer
+- Class Promotion
+- Completed
+- Dropped Out
+
+### 5.2 Batch Transfer
+Example: `12 JEE A → 12 JEE B`
+
+Rules:
+- Preserve attendance history
+- Preserve exam history
+- Preserve fee history
+- New attendance applies only to the new batch going forward
+- Record transfer date
+- Branch Transfer is a distinct, rarer case (e.g., a family relocating from a Chinar Park catchment to Baguipara). Treat it the same way structurally — preserve all history, just re-point `branch_id` going forward and record the transfer date — but flag it for Director awareness since it may have fee and logistics implications a same-branch transfer doesn't.
+
+### 5.3 Class Promotion
+Example: `11 JEE → 12 JEE A` (crosses an `academic_year` boundary)
+
+Rules:
+- Archive previous academic year's records (do not overwrite)
+- Create a **new enrollment record** under the new `academic_year`
+- Retain historical report cards (queryable by old `academic_year`)
+- Configure new fee structure for the new year/package
+- Note: once Pubali/Chinar Park are live, promotion from **Class 10 → Class 11** will also be a **branch transfer** (e.g., Pubali → Baguipara), since no branch currently spans both ranges. This is the single biggest reason `branch` needs to be modeled now — it's not an edge case, it's the standard graduation path for every student in the two junior branches.
+
+### 5.4 Leave of Absence
+Rules:
+- Pause attendance calculations for the leave period
+- Pause fee reminders if approved
+- Preserve batch assignment
+- Record start and end dates
+
+### 5.5 Dropped Out
+Rules:
+- Mark status as Dropped Out
+- Stop future attendance tracking
+- Stop schedule notifications
+- Freeze academic history
+
+Financial treatment (refunds, pro-rated dues, outstanding balance handling): **to be finalized with Director.**
+
+### 5.6 Course Completion
+Rules:
+- Mark status as Completed
+- Lock academic records (no further edits)
+- Keep reports accessible indefinitely
+
+---
+
+## 6. Room Management
+*(Scope: Baguipara branch only — see Section 3. Other branches will define their own Room table rows under the same `branch_id`-scoped structure.)*
+
+### Available Rooms — Baguipara
+
+| Room | Capacity |
+|---|---|
+| 0 | 5 |
+| 1 | 15 |
+| 2 | 10 |
+| 3 | 10 |
+| 4 | 30 |
+| 5 | 15 |
+| 6 | 20 |
+| 7 | 30 |
+
+The system should prevent room allocation above room capacity. Room conflict/capacity checks must always be scoped **within a branch** — "Room 3" at Baguipara and a future "Room 3" at Pubali are unrelated rooms and must never be cross-checked against each other.
+
+### Room Allocation Rules
+- If a class is cancelled, the room becomes **immediately available** for that time slot.
+- Applies to both regular classes and extra classes.
+
+### Room Sharing Rules
+- Multiple extra classes may share a room.
+- Multiple classes may share a room if timings do not overlap.
+- Rare case: one-hour classes may share a room if schedules do not conflict.
+- Conflict detection applies **only to overlapping times**, not to room re-use within a day.
+
+---
+
+## 7. User Roles & Permissions
+
+### Director
+Full system access — view, create, edit, delete across all modules, **across all branches** by default.
+
+### Mentor
+Academic and operational access (student records, batches, attendance, chapter progress, schedules, exams, marks, report cards), scoped to their **assigned branch(es)**. **No financial data visibility** — cannot view package fees, payment history, due amounts, or collection reports.
+
+### Admin (Receptionist)
+Primarily view-only across academic modules, with read access to financial data, scoped to their **assigned branch(es)**. Has Edit rights on Rooms, Attendance, and Results (see matrix below).
+
+### Permission Matrix
+
+| Module | Director | Mentor | Admin |
+|---|---|---|---|
+| Dashboard | Edit | Edit | View |
+| Students | Edit | Edit | View |
+| Batches | Edit | Edit | View |
+| Schedule | Edit | Edit | View |
+| Rooms | Edit | Edit | Edit |
+| Attendance | Edit | Edit | Edit |
+| Chapter Progress | Edit | Edit | View |
+| Exams | Edit | Edit | View |
+| Results | Edit | Edit | Edit |
+| Report Cards | Edit | Edit | View |
+| Fees | Edit | No Access | View |
+| Payments | Edit | No Access | View |
+| Leads & Admissions | Edit | Edit | View |
+| User Management | Edit | No Access | No Access |
+| System Settings | Edit | No Access | No Access |
+| Activity Logs | View | View | View |
+
+**Definitions:** Edit = create, update, delete. View = read-only. No Access = module hidden completely. **Mentors must never see financial data**, regardless of any other Edit rights granted elsewhere.
+
+> **Confirmed with Director:** User Management and System Settings remain **Director-only**. An earlier draft had mistakenly granted Mentor → Edit on these two modules; corrected back to No Access for Mentor.
+
+### Branch Scoping (New in v1.2)
+The matrix above defines *what* a role can do. **Which branch's data** they can do it on is a second, independent check:
+- Director → all branches, always.
+- Mentor / Admin → only their assigned home branch(es), recorded on the user account (`branch_id` or `branch_ids[]`).
+- Effective access = (role permission from matrix) **AND** (record's `branch_id` is in the user's assigned branches).
+
+This doesn't need a UI today since everyone is at Baguipara, but the data model and the permission-check function should take a branch parameter from day one — otherwise every query in the app needs to be retrofitted with a branch filter later instead of having it built in from the start.
+
+### Granular Permission Flags (Future-Proofing)
+The permission system should be modeled as flags, not hardcoded roles, so it can evolve without a rewrite:
+
+`can_view_fees`, `can_edit_fees`, `can_mark_attendance`, `can_edit_attendance`, `can_manage_schedule`, `can_manage_rooms`, `can_view_marks`, `can_edit_marks`, `can_generate_report_cards`, `can_approve_report_cards`, `can_manage_users`, `can_manage_system_settings`, `can_manage_leads`
+
+v1 can ship with roles mapping to fixed bundles of these flags; v2 unlocks per-user flag overrides without touching the schema.
+
+---
+
+## 8. Module-by-Module Requirements
+
+### Module 1: Dashboard
+**Today's Classes:** Time, Batch, Subject, Faculty, Room, Batch Strength, Status (Upcoming / Ongoing / Completed / Cancelled).
+
+**Quick Stats:** Total Students, Classes Today, Fees Due, Pending Attendance, Upcoming Exams, Low Attendance Students.
+
+**Alerts:** Room Conflict, Overdue Fees, Missing Attendance, Batch without Test, Teacher Double Booking.
+
+> Once multi-branch is live, Director's dashboard should support a **branch filter / "all branches" consolidated view**; Mentor/Admin dashboards simply show their own branch with no filter needed.
+
+### Module 2: Student Management
+- **Personal Details:** Name, Parent Name, Class, Admission Date *(no mobile numbers stored — see note below)*
+- **Academic Details:** Batch, Subjects, Package Type, Add-on Subjects, `academic_year`, `branch`
+- **Academic History:** Attendance, Exams, Results, Report Cards (all filterable by `academic_year`)
+- **Financial Details:** Package Fee, Amount Paid, Due Amount, Installment Schedule
+- **Status:** one of the lifecycle statuses in Section 5
+
+> **Decision: no mobile numbers stored.** Per Director instruction, neither the student's nor the parent's mobile number is captured anywhere in the system. This is intentional, not an oversight: Shiksharthi OS surfaces fee/attendance **alerts to in-app staff** (Director, Mentor, Admin — per Module 12 in Section 8), who manually relay them to the **Head of Shiksharthi (an external person, not a user of this webapp)**. The Head of Shiksharthi handles parent contact entirely outside the system. The system itself never needs to dial or message anyone, so it never needs to store a phone number.
+
+### Module 3: Batch Management
+Each batch (scoped to an `academic_year` and a `branch`) maintains: Batch Name, Class, Students, Faculty, Subjects, Current Chapter, Last Exam Date.
+
+Example:
+```
+12 JEE A (Baguipara, 2026–27)
+Physics:     Current Chapter: Electrostatics
+Chemistry:   Current Chapter: Solutions
+Mathematics: Current Chapter: Integrals
+```
+
+### Module 4: Schedule Management
+- **Recurring Schedule:** weekly schedules, e.g. `Mon 5 PM – 7 PM | Baguipara | 12 JEE A | Physics | Room 7`
+- **Extra Classes:** add, change room, change faculty, cancel — see Module 4b below
+- **Daily View:** all classes scheduled for the day, scoped to a branch
+- System must detect room conflicts and faculty conflicts (overlapping-time only, **within the same branch** — see Section 6)
+
+### Module 4b: Extra Class Tracking
+Extra classes are tracked as **first-class entities**, not just calendar add-ons. Each record stores: Batch, Subject, Faculty, Date, Start Time, End Time, Room, Attendance, Chapter Covered, Notes, Reason for Extra Class.
+
+**Reports required:**
+- Extra classes by batch
+- Extra classes by faculty
+- Monthly extra class summary
+
+### Module 5: Room Allocation System
+For every class: Room Assigned, Room Capacity, Batch Strength, with a "Room Too Small" alert when batch strength exceeds capacity. Room becomes free immediately on cancellation (Section 6).
+
+### Module 6: Attendance Management
+
+**Session-driven model:** A class "exists" only when attendance is recorded or a session is explicitly marked as conducted.
+
+- If no attendance is recorded for a slot: **do not** mark students absent, and **do not** count that day toward the attendance percentage denominator.
+- No separate "Holiday" status is required for MVP — an unrecorded session is implicitly treated as non-instructional.
+
+**Statuses:** Present, Absent, Leave.
+
+**Reports:** Daily Attendance, Monthly Attendance, Subject-wise Attendance (all scoped by `academic_year` and `branch`).
+
+**Alerts:**
+- Below 75% → Mentor flag
+- Below 60% → High-priority mentor flag
+- No automated parent notifications in MVP (Phase 2 candidate).
+
+### Module 7: Chapter Progress Tracker
+For every batch and subject: Current Chapter, Total Chapters, % Completed.
+
+Example: `12 JEE A — Physics — Current Chapter: Current Electricity — Progress: 52%`
+
+**Current state (MVP):** Manual chapter updates, free-text/editable.
+
+**Future:** A **Syllabus Master** module to standardize chapter names, sequence, and completion percentage per Branch+Class+Batch-type+Subject combination (e.g., "Baguipara — Class 11 JEE Physics," "Baguipara — Class 12 NEET Biology") — this removes the inconsistency risk of every mentor defining their own chapter list, and gives Pubali/Chinar Park a clean place to define their own Class 7–10 syllabi later without touching Baguipara's. Until built, chapter tracking remains freely editable.
+
+### Module 8: Examination Management
+Create exams: Subject Tests, Unit Tests, Mock Tests, Full Syllabus Tests. Track: Exam Date, Batch, Subject, Chapters Covered, `academic_year`, `branch`.
+
+Dashboard should show: Batches without exams this month, Upcoming exams, Pending marks entry.
+
+### Module 9: Result Management
+Store Marks, Rank, Percentage (per `academic_year`, per `branch`). Generate Subject Analysis and Batch Analysis. Performance indicators: Improvement, Decline, Consistency.
+
+> Note: "Rank" should be computed **within a batch**, not across branches — there's no meaningful comparison between a Baguipara JEE batch and a future Pubali Class 8 batch.
+
+### Module 10: Report Card Generator — Approval Workflow
+
+Monthly report cards automatically include Student Details, Attendance, Test Scores, Teacher Remarks, Rank, Overall Performance — tagged with `academic_year` and `branch`. Exported as PDF.
+
+**Approval workflow:**
+
+| Step | Actor | Action |
+|---|---|---|
+| 1 | Mentor | Enters marks and remarks |
+| 2 | Director | Reviews report card |
+| 3 | Director | Approves report card |
+| 4 | System | Enables PDF generation |
+
+**Statuses:** Draft → Under Review → Approved → Shared.
+
+Only **Approved** report cards may be shared with parents.
+
+### Module 11: Fee Management
+Track Package Fee, Installments, Payment History per `academic_year` and `branch`. Statuses: Paid, Due, Overdue. Payment types: Cash, UPI, Bank Transfer.
+
+Dashboard: Today's Collections, Monthly Collections, Outstanding Dues — Director view should support per-branch breakdown once multi-branch is live.
+
+### Module 12: Internal Fee & Attendance Alert System
+*(Renamed from "Automated Fee Reminder System" — see resolution below.)*
+
+**Resolved (no longer blocked):** Shiksharthi OS does not contact parents directly, and it has no concept of a "Head of Shiksharthi" user account — that person is **not a user of this webapp**. The system surfaces **internal alerts** — Upcoming / Due / Overdue installments, low attendance flags (Section 8, Module 6) — visible only to the existing in-app roles: Admin, Mentor, and Director, on the Dashboard, per the Permission Matrix (Section 7). Whichever in-app role sees the alert relays it **manually, outside the system** (phone call, message, in person) to the Head of Shiksharthi, who is the one who actually follows up with parents — entirely outside Shiksharthi OS's scope.
+
+- No outbound WhatsApp/SMS/email is sent by the system.
+- Status tracking is simplified to: `Alert Raised` → `Acknowledged` (someone has seen it and is following up) — there's no "Reminder Sent" status anymore, since the system itself never sends anything.
+- This removes the no-mobile-number blocker entirely: the system never needed a phone number to call, only to text — and texting is no longer in scope.
+
+### Module 13: Faculty Management
+Track Faculty Name, Subjects, Assigned Batches (per `academic_year`), and Assigned Branch(es) — see Section 3 note on faculty potentially working across branches. Monitor Teaching Load and Classes Scheduled (per branch, and in aggregate for cross-branch faculty).
+
+### Module 14: Activity Log
+Every action recorded: Student Added, Attendance Updated, Fee Recorded, Marks Entered — tagged with the acting user's branch context. Useful for auditing — recommend also logging *views* of sensitive financial data, not just edits.
+
+---
+
+## 9. Financial Rules (Pending Director Finalization)
+
+Detailed financial configuration (exact package amounts, installment counts/dates, discount and refund policy) is **pending discussion with the Director**. The system architecture must support, from day one, the following capabilities so this isn't a rebuild later:
+
+- Package fees
+- Installments (with variable/configurable installment dates, not fixed-only)
+- Partial payments
+- Manual fee adjustments
+- Discounts
+- Scholarships
+- Refunds
+- Outstanding balances
+- **Per-branch fee structures** (Class 8 fees at Pubali will not resemble JEE/NEET package fees at Baguipara — the Fee Policy module below should be scoped per branch, not global)
+
+**Future module:** A dedicated **Fee Policy module** to configure, per branch:
+- JEE package pricing (Baguipara)
+- NEET package pricing (Baguipara)
+- Add-on subject pricing
+- Per-class flat fees (Pubali / Chinar Park, once built)
+- Refund rules (tied into the Dropped Out lifecycle status, Section 5.5)
+
+---
+
+## 10. MVP Success Criteria
+
+The system should allow any admin, mentor, or director to answer, within 10 seconds:
+
+- Has a student paid fees?
+- Which batch is a student in?
+- What subjects is a student taking?
+- Which chapter is a batch covering?
+- Which room is allocated?
+- Which exams are upcoming?
+- Which students have low attendance?
+- Which fees are pending?
+- Which batches have not had a test this month?
+
+If all these questions can be answered instantly, Shiksharthi OS is successful.
+
+---
+
+## 11. Future Features (Phase 2)
+- Parent Portal
+- Student Portal
+- WhatsApp Notifications — **removed from scope** (Section 8, Module 12): Shiksharthi OS surfaces internal alerts only, to in-app roles; the Head of Shiksharthi (not a system user) handles parent contact entirely manually, outside the system
+- AI Performance Insights
+- Homework Tracking
+- CW/HW Tracking
+- Study Material Repository
+- Faculty Mobile App
+- Fee Policy module (configurable package/add-on pricing, refund rules, per branch)
+- Syllabus Master module (standardized chapter reference data, per branch)
+- Pubali and Chinar Park branch rollout: Class 7–10 academic structure, room sets, and fee policy
+
+---
+
+## 12. Open Items Carried Forward (Still Need Director Input)
+1. Exact package fee amounts and add-on pricing for Baguipara (blocks Module 11 build).
+2. Installment count/date rules — fixed calendar dates vs. relative to admission date.
+3. Dropped Out financial treatment — refund formula, pro-ration logic.
+4. Mid-year add-on subject changes — how the fee delta is recorded against the original package fee.
+5. **Class 7–10 academic structure for Pubali and Chinar Park** — subjects, batch-naming convention, and whether a "package" concept applies at all, or a flat per-class fee.
+6. **Faculty model for cross-branch teaching staff** — confirm whether any current/planned faculty member teaches at more than one branch, since that determines whether `FacultyBranchAssignment` needs to support multiple rows per faculty member from day one.
+7. **Timeline for Pubali / Chinar Park rollout** — informs how soon the Branch reference table needs real (not placeholder) rows and whether Admin/Mentor accounts need branch-assignment UI before launch.
+
+*(Resolved: User Management and System Settings are confirmed Director-only — Mentor has No Access, per Section 7.)*
+*(Resolved: No mobile numbers — student or parent — are stored anywhere in the system, per Director instruction.)*
+*(Resolved: Head of Shiksharthi is confirmed to have no account/role in the webapp. They receive fee/attendance information only via manual relay from in-app staff and handle parent contact entirely outside the system — no Permission Matrix entry needed.)*
+*(Resolved: Module 12 and the Phase 2 WhatsApp feature no longer need a delivery channel — the system raises internal alerts only; parent contact is handled manually by the Head of Shiksharthi / Director outside the system.)*
+
+---
+
+## Appendix A: Database Schema — `Branch` & `AcademicYear` Reference Tables
+
+These two tables are the foundation referenced throughout Sections 2, 3, and 8. Every other table that needs year- or branch-scoping should hold a foreign key into one (or both) of these rather than repeating raw strings.
+
+### A.1 `Branch`
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID / INT (PK) | Primary Key, auto-generated | |
+| `name` | VARCHAR(100) | Unique, Not Null | e.g. "Pubali", "Baguipara", "Chinar Park" |
+| `code` | VARCHAR(10) | Unique, Not Null | Short code for display/URLs, e.g. `PUB`, `BGP`, `CHP` |
+| `address` | TEXT | Nullable | Physical address |
+| `class_range_min` | INT | Not Null | e.g. `7` for Pubali, `11` for Baguipara |
+| `class_range_max` | INT | Not Null | e.g. `10` for Pubali, `12` for Baguipara |
+| `is_active` | BOOLEAN | Not Null, Default `true` | Pubali/Chinar Park can be seeded now and flipped active later when their rollout begins — see Section 12, Open Item 7 |
+| `created_at` | TIMESTAMP | Not Null, Default now | |
+| `updated_at` | TIMESTAMP | Not Null, auto-update | |
+
+**Seed data (insert now, even though only Baguipara is "live"):**
+
+| id | name | code | class_range_min | class_range_max | is_active |
+|---|---|---|---|---|---|
+| 1 | Baguipara | BGP | 11 | 12 | true |
+| 2 | Pubali | PUB | 7 | 10 | false |
+| 3 | Chinar Park | CHP | 7 | 10 | false |
+
+> Seeding all three rows now — even with two marked inactive — means every foreign key, dropdown, and report built today already points at a real `branch_id`. When Pubali/Chinar Park go live, you flip `is_active` and start attaching real data; you never have to backfill a `branch_id` column onto existing tables.
+
+---
+
+### A.2 `AcademicYear`
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID / INT (PK) | Primary Key, auto-generated | |
+| `label` | VARCHAR(10) | Unique, Not Null | e.g. `2026–27` |
+| `start_date` | DATE | Not Null | e.g. April 2026 (or whatever the institute's actual term start is — confirm with Director) |
+| `end_date` | DATE | Not Null | e.g. March 2027 |
+| `is_current` | BOOLEAN | Not Null, Default `false` | Exactly one row should be `true` at any time — enforce at the application layer (or a DB constraint/trigger) |
+| `created_at` | TIMESTAMP | Not Null, Default now | |
+
+**Seed data:**
+
+| id | label | start_date | end_date | is_current |
+|---|---|---|---|---|
+| 1 | 2025–26 | 2025-04-01 | 2026-03-31 | false |
+| 2 | 2026–27 | 2026-04-01 | 2027-03-31 | true |
+
+> Rolling over to a new year = insert one row, flip `is_current`. No existing data moves or gets rewritten.
+
+---
+
+### A.3 How other tables reference these two
+
+Every table listed in Sections 2 and 3 should carry both foreign keys (not a copy of the label/name — always the ID):
+
+| Table | `branch_id` (FK → Branch.id) | `academic_year_id` (FK → AcademicYear.id) |
+|---|---|---|
+| `Enrollment` (see A.4) | Yes | Yes |
+| `Batch` | Yes | Yes |
+| `Room` | Yes | No — rooms are physical, not year-bound |
+| `Schedule` | Yes (via Batch/Room) | Yes |
+| `Attendance` | Yes (via Batch) | Yes |
+| `Exam` | Yes (via Batch) | Yes |
+| `Result` | Yes (via Exam) | Yes |
+| `ReportCard` | Yes (via Enrollment) | Yes |
+| `Fee` / `Installment` | Yes | Yes |
+| `FacultyBranchAssignment` | Yes (one row per branch a faculty member teaches at) | Optional — add if assignments can change year to year |
+| `User` (Admin/Mentor accounts) | Yes — `branch_id` or a join table `UserBranchAccess` if a user can be assigned to more than one branch | No |
+
+---
+
+### A.4 `Student` ↔ `Enrollment` Split (Implemented)
+
+Because Class Promotion (Section 5.3) and Branch/Batch Transfer (Sections 5.2, 5.3) each create a *new* academic record rather than overwriting the old one, `branch_id`, `class`, `batch_id`, and `status` belong on a separate per-year **Enrollment** record — not on the permanent **Student** identity record. This is what makes "show me this student's full history across branches and years" a simple join, instead of a query that has to reconstruct history from overwritten fields.
+
+#### `Student` — permanent identity, one row per real human, never deleted
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID / INT (PK) | Primary Key, auto-generated | |
+| `student_code` | VARCHAR(20) | Unique, Not Null | Human-readable global ID, e.g. `SH-0001` — stays the same across every promotion/transfer for the student's entire time at the institute |
+| `name` | VARCHAR(150) | Not Null | |
+| `parent_name` | VARCHAR(150) | Nullable | |
+| `date_of_birth` | DATE | Nullable | |
+| `gender` | VARCHAR(20) | Nullable | |
+| `address` | TEXT | Nullable | |
+| `admission_date` | DATE | Not Null | First-ever admission date, across all years/branches |
+| `created_at` | TIMESTAMP | Not Null, Default now | |
+| `updated_at` | TIMESTAMP | Not Null, auto-update | |
+
+> **No mobile number field** — per Director instruction, neither the student's nor the parent's contact number is stored anywhere on this table (or anywhere else in the schema). This is no longer a blocker for Module 12 (Section 8) — that module raises internal alerts only, to in-app roles; the Head of Shiksharthi (who has no account in this system) is informed manually and handles parent contact entirely outside Shiksharthi OS.
+
+#### `Enrollment` — one row per (`student_id`, `academic_year_id`)
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | UUID / INT (PK) | Primary Key, auto-generated | |
+| `student_id` | UUID / INT | FK → `Student.id`, Not Null | |
+| `academic_year_id` | UUID / INT | FK → `AcademicYear.id`, Not Null | |
+| `branch_id` | UUID / INT | FK → `Branch.id`, Not Null | |
+| `class` | VARCHAR(10) | Not Null | e.g. `11`, `12` (or `7`–`10` once Pubali/Chinar Park are live) |
+| `batch_id` | UUID / INT | FK → `Batch.id`, Not Null | |
+| `package_type` | VARCHAR(20) | Nullable | `JEE`, `NEET`, `Boards`, or null for branches without package logic (Section 3) |
+| `add_on_subjects` | JSON / linked table | Nullable | e.g. `["Computer Science"]` |
+| `status` | VARCHAR(30) | Not Null, Default `Active` | One of: `Active`, `Leave of Absence`, `Batch Transfer`, `Branch Transfer`, `Class Promotion`, `Completed`, `Dropped Out` — per Section 5.1 |
+| `status_effective_date` | DATE | Not Null | Date the current status took effect (transfer date, leave start date, etc. — per Sections 5.2–5.6) |
+| `previous_enrollment_id` | UUID / INT | FK → `Enrollment.id`, Nullable | Self-reference linking to the prior year/batch/branch record — this is what makes a student's full chain (e.g. `11 JEE @ Baguipara 2025–26` → `12 JEE A @ Baguipara 2026–27`) traversable in one recursive query |
+| `created_at` | TIMESTAMP | Not Null, Default now | |
+| `updated_at` | TIMESTAMP | Not Null, auto-update | |
+
+**Unique constraint:** (`student_id`, `academic_year_id`) should be unique — a student has exactly one active enrollment per academic year. (A same-year batch transfer updates the existing row's `batch_id`/`branch_id` and logs the change via Activity Log, Module 14, rather than creating a second enrollment row for the same year.)
+
+**Worked example — Class Promotion across a year (Section 5.3):**
+
+| id | student_id | academic_year_id | branch_id | class | batch_id | status | previous_enrollment_id |
+|---|---|---|---|---|---|---|---|
+| E-101 | S-001 | 2025–26 | Baguipara | 11 | `11 JEE` | Completed | — |
+| E-204 | S-001 | 2026–27 | Baguipara | 12 | `12 JEE A` | Active | E-101 |
+
+Querying `Student S-001`'s full history is now: `SELECT * FROM Enrollment WHERE student_id = 'S-001' ORDER BY academic_year_id` — no field was overwritten, nothing was lost, and the `previous_enrollment_id` chain shows exactly when and how the student moved.
+
+Every other module that today says "Student" for attendance, exams, results, report cards, and fees (Sections 2, 8) should key off **`enrollment_id`**, not `student_id` directly — that's what keeps a student's Class 11 attendance record from ever being confused with their Class 12 attendance record once both exist in the same table.

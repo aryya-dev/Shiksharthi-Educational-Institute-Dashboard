@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+
+# next
+.next/
+out/
+
+# production
+build/
+dist/
+
+# environment
+.env.local
+.env
+
+# logs
+*.log
+
+# typescript
+*.tsbuildinfo
+
+# misc
+.DS_Store

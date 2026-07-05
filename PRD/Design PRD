@@ -1,0 +1,285 @@
+## 13. Design Principles & Design System
+
+### 13.1 Design Philosophy
+
+Shiksharthi OS is an internal operations platform, not a marketing website.
+
+The interface should prioritize:
+
+* Fast information retrieval
+* Low cognitive load
+* High information density
+* Minimal clicks
+* Cross-device usability
+* Mobile-first execution
+
+Users should be able to answer any operational question within 10 seconds.
+
+---
+
+### 13.2 Visual Personality
+
+The product should feel:
+
+* Professional
+* Trustworthy
+* Warm
+* Organized
+* Modern
+
+Avoid:
+
+* Corporate enterprise aesthetics
+* Excessive animations
+* Overuse of gradients
+* Neon colors
+* Decorative elements without purpose
+
+---
+
+### 13.3 Color System
+
+#### Primary Colors
+
+* Primary Orange: `#F59E0B`
+* Secondary Orange: `#FB923C`
+* Light Orange: `#FED7AA`
+
+#### Neutral Colors
+
+* Background: `#F8FAFC`
+* Card Surface: `#FFFFFF`
+* Secondary Surface: `#FFF7ED`
+* Border: `#E5E7EB`
+* Divider: `#D1D5DB`
+
+#### Typography Colors
+
+* Primary Text: `#111827`
+* Secondary Text: `#6B7280`
+* Disabled Text: `#9CA3AF`
+
+#### Semantic Colors
+
+* Success: `#10B981`
+* Warning: `#F59E0B`
+* Error: `#EF4444`
+* Information: `#3B82F6`
+
+---
+
+### 13.4 Color Usage Ratio
+
+* 80% White
+* 15% Neutral Gray
+* 5% Orange
+
+Orange should be reserved for:
+
+* Primary actions
+* Active navigation states
+* Progress indicators
+* Key metrics
+* Alerts requiring action
+
+Critical alerts must use red instead of orange.
+
+---
+
+### 13.5 Typography
+
+#### Font Family
+
+Primary:
+
+* Inter
+
+Fallback:
+
+* Geist
+* System Sans-serif
+
+#### Type Scale
+
+* Page Title: 32px / Bold / 40px line height
+* Section Title: 24px / Semibold / 32px line height
+* Card Title: 18px / Semibold / 28px line height
+* Body Text: 14px / Regular / 20px line height
+* Caption: 12px / Medium / 16px line height
+
+---
+
+### 13.6 Spacing System
+
+Use an 8-point grid.
+
+Approved spacing values:
+
+* 4px
+* 8px
+* 12px
+* 16px
+* 24px
+* 32px
+* 48px
+* 64px
+
+Minimum spacing between cards:
+
+* 16px
+
+Minimum page padding:
+
+* Desktop: 24px
+* Tablet: 20px
+* Mobile: 16px
+
+---
+
+### 13.7 Border Radius
+
+* Small Components: 8px
+* Cards: 16px
+* Buttons: 12px
+* Modals: 20px
+
+Use consistent rounding throughout the application.
+
+---
+
+### 13.8 Elevation & Shadows
+
+Card Shadow:
+
+```css
+0 2px 8px rgba(0, 0, 0, 0.06)
+```
+
+Hover Shadow:
+
+```css
+0 8px 20px rgba(0, 0, 0, 0.08)
+```
+
+Avoid heavy shadows.
+
+Use borders and spacing before increasing elevation.
+
+---
+
+### 13.9 Icons
+
+Icon Library:
+
+* Lucide Icons
+
+Rules:
+
+* Use outlined icons
+* Default size: 20px
+* Navigation size: 22px
+* Use semantic colors sparingly
+
+---
+
+### 13.10 Component Principles
+
+#### Cards
+
+* White background
+* 16px border radius
+* Subtle shadow
+* Clear heading hierarchy
+
+#### Buttons
+
+Primary:
+
+* Orange background
+* White text
+
+Secondary:
+
+* White background
+* Gray border
+
+Tertiary:
+
+* Text only
+
+#### Tables
+
+Desktop only.
+
+Requirements:
+
+* Sticky headers
+* Sorting
+* Filtering
+* Search
+
+Avoid tables on mobile.
+
+Use cards instead.
+
+---
+
+### 13.11 Responsive Breakpoints
+
+* Mobile: 0–767px
+* Tablet: 768–1023px
+* Desktop: 1024–1439px
+* Large Desktop: 1440px+
+
+---
+
+### 13.12 Mobile Design Rules
+
+Do not shrink desktop layouts.
+
+Mobile interfaces must:
+
+* Use bottom navigation
+* Prioritize search
+* Minimize typing
+* Use cards instead of tables
+* Support one-handed usage
+
+Maximum taps per workflow:
+
+3 taps
+
+Minimum touch target:
+
+44×44px
+
+---
+
+### 13.13 Motion & Animation
+
+Animation duration:
+
+150–250ms
+
+Allowed:
+
+* Hover states
+* Skeleton loading
+* Page transitions
+* Expand/collapse interactions
+
+Avoid:
+
+* Parallax effects
+* Complex animations
+* Autoplay interactions
+
+---
+
+### 13.14 Accessibility
+
+* Minimum contrast ratio: 4.5:1
+* Support keyboard navigation
+* Provide visible focus states
+* Never rely on color alone for status communication
+* Pair status colors with icons or labels
