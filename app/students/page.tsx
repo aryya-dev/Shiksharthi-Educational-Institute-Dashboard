@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { 
   Search, 
   UserPlus, 
@@ -16,8 +16,19 @@ import {
   Layers,
   Repeat,
   ArrowRightLeft,
-  AlertCircle
+  AlertCircle,
+  Printer
 } from 'lucide-react';
+import { 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  ResponsiveContainer,
+  CartesianGrid
+} from 'recharts';
+import { Document, Page as PdfPage, Text, View, StyleSheet, PDFDownloadLink } from '@react-pdf/renderer';
 import { useAppStore } from '@/store/useAppStore';
 import { createClient } from '@/utils/supabase/client';
 
@@ -40,6 +51,23 @@ interface StudentListItem {
   gender?: string;
 }
 
+interface SubjectAttendance {
+  subject: string;
+  totalClasses: number;
+  present: number;
+  absent: number;
+  leave: number;
+  percentage: number;
+}
+
+interface AttendanceTrendPoint {
+  date: string;
+  label: string;
+  present: number;
+  total: number;
+  percentage: number;
+}
+
 const toTitleCase = (str: string) => {
   if (!str) return '';
   if (str === str.toUpperCase()) {
@@ -51,6 +79,121 @@ const toTitleCase = (str: string) => {
   }
   return str;
 };
+
+// PDF Styling for Academic History Report
+const academicPdfStyles = StyleSheet.create({
+  page: { padding: 40, fontFamily: 'Helvetica', fontSize: 10, backgroundColor: '#FFFFFF' },
+  header: { marginBottom: 24, borderBottomWidth: 2, borderBottomColor: '#F59E0B', paddingBottom: 12 },
+  title: { fontSize: 22, fontWeight: 'bold', color: '#111827', letterSpacing: -0.5 },
+  subtitle: { fontSize: 11, color: '#6B7280', marginTop: 4, textTransform: 'uppercase', letterSpacing: 1 },
+  section: { marginBottom: 20 },
+  sectionTitle: { fontSize: 12, fontWeight: 'bold', color: '#111827', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingBottom: 6, marginBottom: 8 },
+  row: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', padding: 6, alignItems: 'center' },
+  headerRow: { flexDirection: 'row', backgroundColor: '#F9FAFB', padding: 6, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+  label: { width: 140, color: '#6B7280', fontWeight: 'medium' },
+  value: { flex: 1, color: '#111827', fontWeight: 'bold' },
+  cellSubject: { width: 120, fontSize: 10 },
+  cellNumber: { width: 60, fontSize: 10, textAlign: 'center' },
+  cellPct: { width: 70, fontSize: 10, textAlign: 'center', fontWeight: 'bold' },
+  overallRow: { flexDirection: 'row', padding: 8, backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A', borderRadius: 4, marginTop: 8 },
+  footer: { position: 'absolute', bottom: 40, left: 40, right: 40, borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingTop: 12, textAlign: 'center' },
+  footerText: { fontSize: 8, color: '#9CA3AF' }
+});
+
+// PDF Document Component for Academic History
+const AcademicHistoryPDF = ({ 
+  studentName, studentCode, batchName, className,
+  subjectAttendance, overallAttendance,
+  examScores
+}: { 
+  studentName: string; studentCode: string; batchName: string; className: string;
+  subjectAttendance: SubjectAttendance[]; overallAttendance: number | null;
+  examScores: any[];
+}) => (
+  <Document>
+    <PdfPage size="A4" style={academicPdfStyles.page}>
+      <View style={academicPdfStyles.header}>
+        <Text style={academicPdfStyles.title}>SHIKSHARTHI COACHING INSTITUTE</Text>
+        <Text style={academicPdfStyles.subtitle}>Academic History Report</Text>
+      </View>
+
+      <View style={academicPdfStyles.section}>
+        <Text style={academicPdfStyles.sectionTitle}>Student Profile</Text>
+        <View style={academicPdfStyles.row}>
+          <Text style={academicPdfStyles.label}>Student Name</Text>
+          <Text style={academicPdfStyles.value}>{studentName}</Text>
+        </View>
+        <View style={academicPdfStyles.row}>
+          <Text style={academicPdfStyles.label}>Student Code</Text>
+          <Text style={academicPdfStyles.value}>{studentCode}</Text>
+        </View>
+        <View style={academicPdfStyles.row}>
+          <Text style={academicPdfStyles.label}>Class / Batch</Text>
+          <Text style={academicPdfStyles.value}>Class {className} — {batchName}</Text>
+        </View>
+      </View>
+
+      <View style={academicPdfStyles.section}>
+        <Text style={academicPdfStyles.sectionTitle}>Subject-wise Attendance</Text>
+        <View style={academicPdfStyles.headerRow}>
+          <Text style={[academicPdfStyles.cellSubject, { fontWeight: 'bold', color: '#374151' }]}>Subject</Text>
+          <Text style={[academicPdfStyles.cellNumber, { fontWeight: 'bold', color: '#374151' }]}>Total</Text>
+          <Text style={[academicPdfStyles.cellNumber, { fontWeight: 'bold', color: '#374151' }]}>Present</Text>
+          <Text style={[academicPdfStyles.cellNumber, { fontWeight: 'bold', color: '#374151' }]}>Absent</Text>
+          <Text style={[academicPdfStyles.cellNumber, { fontWeight: 'bold', color: '#374151' }]}>Leave</Text>
+          <Text style={[academicPdfStyles.cellPct, { fontWeight: 'bold', color: '#374151' }]}>%</Text>
+        </View>
+        {subjectAttendance.map((sa, i) => (
+          <View key={i} style={academicPdfStyles.row}>
+            <Text style={academicPdfStyles.cellSubject}>{sa.subject}</Text>
+            <Text style={academicPdfStyles.cellNumber}>{sa.totalClasses}</Text>
+            <Text style={academicPdfStyles.cellNumber}>{sa.present}</Text>
+            <Text style={academicPdfStyles.cellNumber}>{sa.absent}</Text>
+            <Text style={academicPdfStyles.cellNumber}>{sa.leave}</Text>
+            <Text style={academicPdfStyles.cellPct}>{sa.percentage.toFixed(1)}%</Text>
+          </View>
+        ))}
+        {overallAttendance !== null && (
+          <View style={academicPdfStyles.overallRow}>
+            <Text style={[academicPdfStyles.cellSubject, { fontWeight: 'bold' }]}>Overall Average</Text>
+            <Text style={academicPdfStyles.cellNumber}>{subjectAttendance.reduce((a, s) => a + s.totalClasses, 0)}</Text>
+            <Text style={academicPdfStyles.cellNumber}>{subjectAttendance.reduce((a, s) => a + s.present, 0)}</Text>
+            <Text style={academicPdfStyles.cellNumber}>{subjectAttendance.reduce((a, s) => a + s.absent, 0)}</Text>
+            <Text style={academicPdfStyles.cellNumber}>{subjectAttendance.reduce((a, s) => a + s.leave, 0)}</Text>
+            <Text style={[academicPdfStyles.cellPct, { color: '#D97706' }]}>{overallAttendance.toFixed(1)}%</Text>
+          </View>
+        )}
+      </View>
+
+      {examScores.length > 0 && (
+        <View style={academicPdfStyles.section}>
+          <Text style={academicPdfStyles.sectionTitle}>Examination Record</Text>
+          <View style={academicPdfStyles.headerRow}>
+            <Text style={[academicPdfStyles.cellSubject, { fontWeight: 'bold', color: '#374151' }]}>Date</Text>
+            <Text style={[academicPdfStyles.cellSubject, { fontWeight: 'bold', color: '#374151' }]}>Subject</Text>
+            <Text style={[academicPdfStyles.cellSubject, { fontWeight: 'bold', color: '#374151' }]}>Exam</Text>
+            <Text style={[academicPdfStyles.cellPct, { fontWeight: 'bold', color: '#374151' }]}>Marks</Text>
+            <Text style={[academicPdfStyles.cellNumber, { fontWeight: 'bold', color: '#374151' }]}>Rank</Text>
+          </View>
+          {examScores.map((score, i) => (
+            <View key={i} style={academicPdfStyles.row}>
+              <Text style={academicPdfStyles.cellSubject}>{score.date}</Text>
+              <Text style={academicPdfStyles.cellSubject}>{score.subject}</Text>
+              <Text style={academicPdfStyles.cellSubject}>{score.name}</Text>
+              <Text style={academicPdfStyles.cellPct}>{score.score}</Text>
+              <Text style={academicPdfStyles.cellNumber}>{score.rank}</Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      <View style={academicPdfStyles.footer}>
+        <Text style={academicPdfStyles.footerText}>This is a computer-generated academic report issued by Shiksharthi OS.</Text>
+        <Text style={[academicPdfStyles.footerText, { marginTop: 4 }]}>Generated on {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}.</Text>
+      </View>
+    </PdfPage>
+  </Document>
+);
 
 export default function StudentsPage() {
   const supabase = createClient();
@@ -366,7 +509,7 @@ export default function StudentsPage() {
     const matchesBatch = batchFilter === 'All' || st.batch_id === batchFilter;
 
     return matchesSearch && matchesClass && matchesStatus && matchesBatch;
-  });
+  }).sort((a, b) => a.student_code.localeCompare(b.student_code, undefined, { numeric: true }));
 
   return (
     <div className="page-column">
@@ -964,11 +1107,21 @@ function StudentDetailModal({
   const [activeTab, setActiveTab] = useState<'info' | 'academic' | 'billing'>('info');
 
   const [loading, setLoading] = useState(true);
-  const [attendanceRate, setAttendanceRate] = useState<number | null>(null);
+  const [subjectAttendance, setSubjectAttendance] = useState<SubjectAttendance[]>([]);
+  const [attendanceTrend, setAttendanceTrend] = useState<AttendanceTrendPoint[]>([]);
   const [avgExamMark, setAvgExamMark] = useState<number | null>(null);
   const [examScores, setExamScores] = useState<any[]>([]);
   const [installments, setInstallments] = useState<any[]>([]);
   const [admissionMonthYear, setAdmissionMonthYear] = useState<string | null>(null);
+
+  // Derived overall attendance
+  const overallAttendance = useMemo(() => {
+    if (subjectAttendance.length === 0) return null;
+    const totalClasses = subjectAttendance.reduce((a, s) => a + s.totalClasses, 0);
+    const totalPresent = subjectAttendance.reduce((a, s) => a + s.present, 0);
+    if (totalClasses === 0) return null;
+    return Math.round((totalPresent / totalClasses) * 1000) / 10;
+  }, [subjectAttendance]);
 
   // Edit Profile State
   const [isEditing, setIsEditing] = useState(false);
@@ -1167,17 +1320,80 @@ function StudentDetailModal({
     async function fetchDetails() {
       setLoading(true);
       try {
-        // Fetch Attendance
+        // Fetch Attendance with class_sessions join for subject-wise breakdown
         const { data: attData } = await supabase
           .from('attendance')
-          .select('status')
+          .select('status, class_sessions(subject_name, date)')
           .eq('enrollment_id', student.id);
 
         if (attData && attData.length > 0) {
-          const present = attData.filter(a => a.status === 'Present').length;
-          setAttendanceRate(Math.round((present / attData.length) * 1000) / 10);
+          // Get subjects from enrollment, plus any additional from attendance data
+          const enrolledSubjects = new Set<string>(student.subjects_taken || []);
+          attData.forEach((a: any) => {
+            if (a.class_sessions?.subject_name) {
+              enrolledSubjects.add(a.class_sessions.subject_name);
+            }
+          });
+
+          // Compute per-subject attendance
+          const subjectMap = new Map<string, { present: number; absent: number; leave: number; total: number }>();
+          enrolledSubjects.forEach(subj => subjectMap.set(subj, { present: 0, absent: 0, leave: 0, total: 0 }));
+
+          attData.forEach((a: any) => {
+            const subj = a.class_sessions?.subject_name;
+            if (!subj) return;
+            if (!subjectMap.has(subj)) {
+              subjectMap.set(subj, { present: 0, absent: 0, leave: 0, total: 0 });
+            }
+            const entry = subjectMap.get(subj)!;
+            entry.total++;
+            if (a.status === 'Present') entry.present++;
+            else if (a.status === 'Absent') entry.absent++;
+            else if (a.status === 'Leave') entry.leave++;
+          });
+
+          const subjectStats: SubjectAttendance[] = Array.from(subjectMap.entries()).map(([subject, stats]) => ({
+            subject,
+            totalClasses: stats.total,
+            present: stats.present,
+            absent: stats.absent,
+            leave: stats.leave,
+            percentage: stats.total > 0 ? Math.round((stats.present / stats.total) * 1000) / 10 : 0
+          })).sort((a, b) => a.subject.localeCompare(b.subject));
+
+          setSubjectAttendance(subjectStats);
+
+          // Compute attendance trend over time (running average)
+          const sortedRecords = [...attData]
+            .filter((a: any) => a.class_sessions?.date)
+            .sort((a: any, b: any) => new Date(a.class_sessions.date).getTime() - new Date(b.class_sessions.date).getTime());
+
+          let runningPresent = 0;
+          let runningTotal = 0;
+          const trendMap = new Map<string, { present: number; total: number }>();
+
+          sortedRecords.forEach((a: any) => {
+            const dateStr = a.class_sessions.date;
+            runningTotal++;
+            if (a.status === 'Present') runningPresent++;
+            trendMap.set(dateStr, { present: runningPresent, total: runningTotal });
+          });
+
+          const trend: AttendanceTrendPoint[] = Array.from(trendMap.entries()).map(([dateStr, stats]) => {
+            const d = new Date(dateStr);
+            return {
+              date: dateStr,
+              label: d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+              present: stats.present,
+              total: stats.total,
+              percentage: Math.round((stats.present / stats.total) * 1000) / 10
+            };
+          });
+
+          setAttendanceTrend(trend);
         } else {
-          setAttendanceRate(null);
+          setSubjectAttendance([]);
+          setAttendanceTrend([]);
         }
 
         // Fetch Exam Scores
@@ -1770,35 +1986,185 @@ function StudentDetailModal({
         {activeTab === 'academic' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {loading ? (
-              <div className="skeleton" style={{ height: '140px', width: '100%' }} />
+              <div className="skeleton" style={{ height: '300px', width: '100%' }} />
             ) : (
               <>
-                {/* Quick performance summaries */}
+                {/* Print Button */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <PDFDownloadLink
+                    document={
+                      <AcademicHistoryPDF
+                        studentName={student.name}
+                        studentCode={student.student_code}
+                        batchName={student.batch_name}
+                        className={student.class}
+                        subjectAttendance={subjectAttendance}
+                        overallAttendance={overallAttendance}
+                        examScores={examScores}
+                      />
+                    }
+                    fileName={`Academic_History_${student.student_code}.pdf`}
+                    style={{ textDecoration: 'none' }}
+                  >
+                    {({ loading: pdfLoading }) => (
+                      <button 
+                        type="button" 
+                        className="btn btn-secondary" 
+                        style={{ gap: '6px', fontSize: '13px' }}
+                        disabled={pdfLoading}
+                      >
+                        <Printer size={16} />
+                        <span>{pdfLoading ? 'Generating...' : 'Print Academic History'}</span>
+                      </button>
+                    )}
+                  </PDFDownloadLink>
+                </div>
+
+                {/* Overall Summary Cards */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div className="card" style={{ margin: 0, padding: '16px', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                    <TrendingUp size={20} style={{ color: 'var(--color-success)' }} />
+                  <div className="card" style={{ 
+                    margin: 0, padding: '16px', display: 'flex', gap: '12px', alignItems: 'center',
+                    border: '1px solid',
+                    borderColor: overallAttendance !== null && overallAttendance >= 75 ? '#BBF7D0' : overallAttendance !== null && overallAttendance >= 60 ? '#FDE68A' : '#FECACA'
+                  }}>
+                    <div style={{
+                      width: '44px', height: '44px', borderRadius: '50%',
+                      backgroundColor: overallAttendance !== null && overallAttendance >= 75 ? '#DCFCE7' : overallAttendance !== null && overallAttendance >= 60 ? '#FEF3C7' : '#FEE2E2',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: overallAttendance !== null && overallAttendance >= 75 ? '#16A34A' : overallAttendance !== null && overallAttendance >= 60 ? '#D97706' : '#DC2626'
+                    }}>
+                      <TrendingUp size={22} />
+                    </div>
                     <div>
-                      <span className="caption">Attendance Rate</span>
-                      <p style={{ fontWeight: '700', fontSize: '16px' }}>{attendanceRate !== null ? `${attendanceRate}%` : '—'}</p>
+                      <span className="caption">Overall Attendance</span>
+                      <p style={{ fontWeight: '700', fontSize: '20px', margin: 0 }}>{overallAttendance !== null ? `${overallAttendance}%` : '—'}</p>
                     </div>
                   </div>
                   <div className="card" style={{ margin: 0, padding: '16px', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                    <TrendingUp size={20} style={{ color: 'var(--color-info)' }} />
+                    <div style={{
+                      width: '44px', height: '44px', borderRadius: '50%',
+                      backgroundColor: 'var(--surface-secondary)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: 'var(--color-info)'
+                    }}>
+                      <TrendingUp size={22} />
+                    </div>
                     <div>
-                      <span className="caption">Avg. Exam Mark</span>
-                      <p style={{ fontWeight: '700', fontSize: '16px' }}>{avgExamMark !== null ? `${avgExamMark}%` : '—'}</p>
+                      <span className="caption">Avg. Exam Score</span>
+                      <p style={{ fontWeight: '700', fontSize: '20px', margin: 0 }}>{avgExamMark !== null ? `${avgExamMark}%` : '—'}</p>
                     </div>
                   </div>
                 </div>
 
+                {/* Subject-wise Attendance Breakdown */}
+                <div>
+                  <span className="caption" style={{ display: 'block', marginBottom: '10px' }}>Subject-wise Attendance</span>
+                  {subjectAttendance.length === 0 ? (
+                    <p className="secondary-text" style={{ textAlign: 'center', padding: '20px 0' }}>No attendance data recorded yet.</p>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+                      {subjectAttendance.map((sa) => {
+                        const color = sa.percentage >= 75 ? '#16A34A' : sa.percentage >= 60 ? '#D97706' : '#DC2626';
+                        const bgColor = sa.percentage >= 75 ? '#F0FDF4' : sa.percentage >= 60 ? '#FFFBEB' : '#FEF2F2';
+                        const borderColor = sa.percentage >= 75 ? '#BBF7D0' : sa.percentage >= 60 ? '#FDE68A' : '#FECACA';
+                        return (
+                          <div key={sa.subject} style={{
+                            padding: '16px',
+                            borderRadius: 'var(--radius-sm)',
+                            backgroundColor: bgColor,
+                            border: `1px solid ${borderColor}`,
+                            display: 'flex', flexDirection: 'column', gap: '8px'
+                          }}>
+                            <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{sa.subject}</span>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                {sa.present} / {sa.totalClasses} classes
+                              </span>
+                              <span style={{ fontWeight: '700', fontSize: '18px', color }}>{sa.percentage}%</span>
+                            </div>
+                            {/* Mini progress bar */}
+                            <div style={{ height: '6px', borderRadius: '3px', backgroundColor: 'rgba(0,0,0,0.08)', overflow: 'hidden' }}>
+                              <div style={{
+                                height: '100%',
+                                width: `${Math.min(sa.percentage, 100)}%`,
+                                backgroundColor: color,
+                                borderRadius: '3px',
+                                transition: 'width 0.5s ease'
+                              }} />
+                            </div>
+                            <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: 'var(--text-secondary)' }}>
+                              <span>A: {sa.absent}</span>
+                              <span>L: {sa.leave}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Attendance Trend Chart */}
+                {attendanceTrend.length > 1 && (
+                  <div>
+                    <span className="caption" style={{ display: 'block', marginBottom: '10px' }}>Attendance Trend</span>
+                    <div style={{
+                      backgroundColor: 'var(--surface-secondary)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '16px 8px 8px 0',
+                      border: '1px solid var(--border-color)'
+                    }}>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <AreaChart data={attendanceTrend}>
+                          <defs>
+                            <linearGradient id="attendanceGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="#F59E0B" stopOpacity={0.02} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                          <XAxis 
+                            dataKey="label" 
+                            tick={{ fontSize: 11, fill: '#9CA3AF' }} 
+                            axisLine={{ stroke: '#E5E7EB' }}
+                            tickLine={false}
+                          />
+                          <YAxis 
+                            domain={[0, 100]} 
+                            tick={{ fontSize: 11, fill: '#9CA3AF' }} 
+                            axisLine={{ stroke: '#E5E7EB' }}
+                            tickLine={false}
+                            tickFormatter={(v) => `${v}%`}
+                          />
+                          <Tooltip 
+                            formatter={(value: any) => [`${value}%`, 'Attendance']}
+                            contentStyle={{ 
+                              borderRadius: '8px', 
+                              border: '1px solid #E5E7EB', 
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                              fontSize: '12px'
+                            }}
+                          />
+                          <Area 
+                            type="monotone" 
+                            dataKey="percentage" 
+                            stroke="#F59E0B" 
+                            strokeWidth={2.5}
+                            fill="url(#attendanceGrad)" 
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+
                 {/* Exams Ledger */}
                 <div>
-                  <span className="caption" style={{ display: 'block', marginBottom: '8px' }}>Recent test scores</span>
+                  <span className="caption" style={{ display: 'block', marginBottom: '8px' }}>Examination Record</span>
                   <div className="table-container">
                     <table className="table" style={{ fontSize: '13px' }}>
                       <thead>
                         <tr>
-                          <th>Exam Date</th>
+                          <th>Date</th>
                           <th>Subject</th>
                           <th>Exam Name</th>
                           <th>Marks</th>

@@ -87,9 +87,39 @@ export default function FeesPage() {
     // Monthly fields
     monthlyAmount: '',
     additionalAmount: '',
-    additionalAmountStartMonth: '7' // default July
+    additionalAmountStartMonth: String(new Date().getMonth() + 1)
   });
   const [savingFee, setSavingFee] = useState(false);
+
+  // Generate all 12 months for the active academic year (April to next March)
+  const academicYearMonths = useMemo(() => {
+    const startYear = currentAcademicYear 
+      ? new Date(currentAcademicYear.start_date).getFullYear() 
+      : new Date().getFullYear();
+      
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    
+    const list: { label: string; value: string }[] = [];
+    
+    // April to December
+    for (let m = 3; m <= 11; m++) {
+      list.push({
+        label: `${monthNames[m]} ${startYear}`,
+        value: String(m + 1)
+      });
+    }
+    // January to March
+    for (let m = 0; m <= 2; m++) {
+      list.push({
+        label: `${monthNames[m]} ${startYear + 1}`,
+        value: String(m + 1)
+      });
+    }
+    return list;
+  }, [currentAcademicYear]);
 
   const isMentor = userProfile?.role === 'Mentor';
 
@@ -271,7 +301,7 @@ export default function FeesPage() {
         dueDates: ['', '', '', ''],
         monthlyAmount: '',
         additionalAmount: '',
-        additionalAmountStartMonth: '7'
+        additionalAmountStartMonth: String(new Date().getMonth() + 1)
       });
       setShowFeeSetup(true);
     } catch (err) {
@@ -386,12 +416,19 @@ export default function FeesPage() {
           });
         }
 
+        // Check if the additional amount applies to month `m` (using April-March academic indexing)
+        const selectedMonthZeroIndexed = additionalStartMonth - 1;
+        const getAcademicMonthIndex = (monthVal: number) => (monthVal >= 3 ? monthVal - 3 : monthVal + 9);
+        const selectedAcademicIndex = getAcademicMonthIndex(selectedMonthZeroIndexed);
+
         // Monthly installments with optional additional amount
         monthsToGenerate.forEach((m, idx) => {
           const year = m >= currentMonth ? now.getFullYear() : now.getFullYear() + 1;
           const dueDate = `${year}-${String(m + 1).padStart(2, '0')}-05`;
-          const calendarMonth = m + 1; // 1-indexed
-          const dueAmount = (additionalAmt > 0 && additionalStartMonth > 0 && calendarMonth >= additionalStartMonth)
+          
+          const installmentAcademicIndex = getAcademicMonthIndex(m);
+          const isAdditionalApplicable = installmentAcademicIndex >= selectedAcademicIndex;
+          const dueAmount = (additionalAmt > 0 && isAdditionalApplicable)
             ? monthlyAmt + additionalAmt
             : monthlyAmt;
           monthlyRows.push({
@@ -1059,18 +1096,11 @@ export default function FeesPage() {
                         onChange={(e) => setFeeSetup({ ...feeSetup, additionalAmountStartMonth: e.target.value })}
                         disabled={!feeSetup.additionalAmount || parseFloat(feeSetup.additionalAmount) <= 0}
                       >
-                        <option value="1">January</option>
-                        <option value="2">February</option>
-                        <option value="3">March</option>
-                        <option value="4">April</option>
-                        <option value="5">May</option>
-                        <option value="6">June</option>
-                        <option value="7">July</option>
-                        <option value="8">August</option>
-                        <option value="9">September</option>
-                        <option value="10">October</option>
-                        <option value="11">November</option>
-                        <option value="12">December</option>
+                        {academicYearMonths.map((mOpt) => (
+                          <option key={mOpt.value} value={mOpt.value}>
+                            {mOpt.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
