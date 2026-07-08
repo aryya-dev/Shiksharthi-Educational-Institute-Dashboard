@@ -1413,15 +1413,22 @@ function StudentDetailModal({
           .eq('enrollment_id', student.id);
 
         if (resultsData && resultsData.length > 0) {
-          const totalPct = resultsData.reduce((acc, r) => acc + parseFloat(r.percentage), 0);
-          setAvgExamMark(Math.round(totalPct / resultsData.length));
+          const validResults = resultsData.filter((r: any) => parseFloat(r.marks_obtained) >= 0);
+          if (validResults.length > 0) {
+            const totalPct = validResults.reduce((acc, r) => acc + parseFloat(r.percentage), 0);
+            setAvgExamMark(Math.round(totalPct / validResults.length));
+          } else {
+            setAvgExamMark(null);
+          }
           
           const scores = resultsData.map((r: any) => ({
             date: r.exams?.date || '',
             subject: r.exams?.subject_name || '',
             name: r.exams?.name || '',
-            score: `${r.marks_obtained}/${r.exams?.max_marks || 0} (${r.percentage}%)`,
-            rank: r.rank_in_batch ? `${r.rank_in_batch}` : '—'
+            score: parseFloat(r.marks_obtained) < 0 
+              ? 'Absent' 
+              : `${r.marks_obtained}/${r.exams?.max_marks || 0} (${parseFloat(r.percentage).toFixed(1)}%)`,
+            rank: r.rank_in_batch && parseFloat(r.marks_obtained) >= 0 ? `${r.rank_in_batch}` : '—'
           }));
           setExamScores(scores);
         } else {

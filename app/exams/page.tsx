@@ -34,9 +34,9 @@ interface ResultRecord {
   enrollmentId: string;
   studentCode: string;
   studentName: string;
-  marksObtained: number;
-  percentage: number;
-  rank: number;
+  marksObtained: number | null;
+  percentage: number | null;
+  rank: number | null;
 }
 
 export default function ExamsPage() {
@@ -139,43 +139,86 @@ export default function ExamsPage() {
       if (!selectedExam) return;
 
       try {
-        const { data } = await supabase
+        // 1. Fetch existing results
+        const { data: dbResults, error: resultsError } = await supabase
           .from('results')
           .select(`
             id,
             marks_obtained,
             percentage,
             rank_in_batch,
-            enrollments (
-              id,
-              students (
-                name,
-                student_code
-              )
-            )
+            enrollment_id
           `)
           .eq('exam_id', selectedExam.id);
 
-        let mappedResults: ResultRecord[] = (data || []).map((r: any) => ({
-          id: r.id,
-          enrollmentId: r.enrollments?.id,
-          studentCode: r.enrollments?.students?.student_code || '',
-          studentName: r.enrollments?.students?.name || '',
-          marksObtained: parseFloat(r.marks_obtained),
-          percentage: parseFloat(r.percentage),
-          rank: r.rank_in_batch
-        }));
+        if (resultsError) throw resultsError;
 
+        // 2. Fetch all active/on-leave enrollments for this batch
+        const { data: dbEnrollments, error: enrollmentsError } = await supabase
+          .from('enrollments')
+          .select(`
+            id,
+            subjects_taken,
+            students (
+              name,
+              student_code
+            )
+          `)
+          .eq('batch_id', selectedExam.batchId)
+          .in('status', ['Active', 'Leave of Absence']);
 
+        if (enrollmentsError) throw enrollmentsError;
 
-        // Sort results by rank/marks desc
-        mappedResults.sort((a, b) => b.marksObtained - a.marksObtained);
-        setResults(mappedResults);
+        // 3. Filter enrollments by subject name (case-insensitive substring check)
+        const enrolledStudents = (dbEnrollments || []).filter((e: any) => {
+          const subjects = e.subjects_taken || [];
+          return subjects.some((s: string) => 
+            s.toLowerCase().includes(selectedExam.subjectName.toLowerCase())
+          );
+        });
+
+        // 4. Merge results with enrollments
+        const mergedResults: ResultRecord[] = enrolledStudents.map((e: any) => {
+          const existingResult = (dbResults || []).find((r: any) => r.enrollment_id === e.id);
+          
+          return {
+            id: existingResult?.id || `temp-${e.id}`,
+            enrollmentId: e.id,
+            studentCode: e.students?.student_code || '',
+            studentName: e.students?.name || '',
+            marksObtained: existingResult ? parseFloat(existingResult.marks_obtained) : null,
+            percentage: existingResult ? parseFloat(existingResult.percentage) : null,
+            rank: existingResult ? existingResult.rank_in_batch : null
+          };
+        });
+
+        // Sort results: present students ranked desc, then absent, then empty/new
+        mergedResults.sort((a, b) => {
+          if (a.marksObtained !== null && b.marksObtained !== null) {
+            if (a.marksObtained >= 0 && b.marksObtained >= 0) {
+              return b.marksObtained - a.marksObtained;
+            }
+            if (a.marksObtained >= 0) return -1;
+            if (b.marksObtained >= 0) return 1;
+            return a.studentName.localeCompare(b.studentName);
+          }
+          if (a.marksObtained !== null) return -1;
+          if (b.marksObtained !== null) return 1;
+          return a.studentName.localeCompare(b.studentName);
+        });
+
+        setResults(mergedResults);
 
         // Initialize editable fields
         const editingObj: { [id: string]: string } = {};
-        mappedResults.forEach(r => {
-          editingObj[r.enrollmentId] = r.marksObtained.toString();
+        mergedResults.forEach(r => {
+          if (r.marksObtained === null) {
+            editingObj[r.enrollmentId] = '';
+          } else if (r.marksObtained === -1) {
+            editingObj[r.enrollmentId] = 'Absent';
+          } else {
+            editingObj[r.enrollmentId] = r.marksObtained.toString();
+          }
         });
         setEditableResults(editingObj);
       } catch (err) {
@@ -248,17 +291,52 @@ export default function ExamsPage() {
     }
   };
 
+  const isInputInvalid = (valStr: string | undefined, maxMarks: number) => {
+    if (!valStr) return false;
+    const trimmed = valStr.trim().toLowerCase();
+    if (['absent', 'a', 'ab', 'abs', '-1'].includes(trimmed)) return false;
+    const num = parseFloat(trimmed);
+    if (isNaN(num) || num < 0 || num > maxMarks) return true;
+    return false;
+  };
+
   // Handle Save Student Marks spreadsheet
   const handleSaveMarks = async () => {
     if (!selectedExam) return;
 
+    // Validation check before saving
+    const invalidEntries = Object.keys(editableResults).filter(enrollmentId => {
+      return isInputInvalid(editableResults[enrollmentId], selectedExam.maxMarks);
+    });
+
+    if (invalidEntries.length > 0) {
+      alert(`Please correct the invalid marks before saving. Marks must be between 0 and ${selectedExam.maxMarks}, or "Absent".`);
+      return;
+    }
+
     try {
       // Formulate inserts / updates
       const recordsToUpdate = results.map(student => {
-        const inputStr = editableResults[student.enrollmentId];
-        const marks = parseFloat(inputStr) || 0;
-        const pct = (marks / selectedExam.maxMarks) * 100;
+        const inputStr = editableResults[student.enrollmentId]?.trim();
+        if (!inputStr) {
+          return {
+            ...student,
+            marksObtained: null,
+            percentage: null
+          };
+        }
 
+        const lowerInput = inputStr.toLowerCase();
+        if (['absent', 'a', 'ab', 'abs', '-1'].includes(lowerInput)) {
+          return {
+            ...student,
+            marksObtained: -1,
+            percentage: 0
+          };
+        }
+
+        const marks = parseFloat(inputStr);
+        const pct = (marks / selectedExam.maxMarks) * 100;
         return {
           ...student,
           marksObtained: marks,
@@ -266,16 +344,98 @@ export default function ExamsPage() {
         };
       });
 
-      // Recalculate ranks in batch
-      recordsToUpdate.sort((a, b) => b.marksObtained - a.marksObtained);
-      const rankedRecords = recordsToUpdate.map((rec, index) => ({
+      // Recalculate ranks in batch for present students only
+      const presentStudents = recordsToUpdate.filter(r => r.marksObtained !== null && r.marksObtained >= 0);
+      presentStudents.sort((a, b) => (b.marksObtained as number) - (a.marksObtained as number));
+      const rankedPresent = presentStudents.map((rec, index) => ({
         ...rec,
         rank: index + 1
       }));
 
-      // In real code, we write batch queries to supabase `results` table.
+      const otherStudents = recordsToUpdate.filter(r => r.marksObtained === null || r.marksObtained < 0);
+      const rankedOthers = otherStudents.map(rec => ({
+        ...rec,
+        rank: null
+      }));
 
-      setResults(rankedRecords);
+      const finalRanked = [...rankedPresent, ...rankedOthers];
+
+      // Identify records to delete (those that were cleared from the input, but exist in DB)
+      const idsToDelete = finalRanked
+        .filter(r => r.marksObtained === null && r.id && !r.id.startsWith('temp-'))
+        .map(r => r.id);
+
+      if (idsToDelete.length > 0) {
+        const { error: delErr } = await supabase
+          .from('results')
+          .delete()
+          .in('id', idsToDelete);
+        
+        if (delErr) throw delErr;
+      }
+
+      // Identify records to upsert (any record that has non-null marksObtained)
+      const dbUpsertData = finalRanked
+        .filter(r => r.marksObtained !== null)
+        .map(r => {
+          const item: any = {
+            exam_id: selectedExam.id,
+            enrollment_id: r.enrollmentId,
+            marks_obtained: r.marksObtained,
+            percentage: r.percentage,
+            rank_in_batch: r.rank
+          };
+          if (r.id && !r.id.startsWith('temp-')) {
+            item.id = r.id;
+          }
+          return item;
+        });
+
+      if (dbUpsertData.length > 0) {
+        const { data, error } = await supabase
+          .from('results')
+          .upsert(dbUpsertData, { onConflict: 'exam_id,enrollment_id' })
+          .select();
+
+        if (error) throw error;
+
+        // Map database IDs back to our state
+        const updatedWithIds = finalRanked.map(r => {
+          const dbItem = data?.find((d: any) => d.enrollment_id === r.enrollmentId);
+          return {
+            ...r,
+            id: dbItem ? dbItem.id : r.id
+          };
+        });
+
+        // Re-sort results for local state
+        updatedWithIds.sort((a, b) => {
+          if (a.marksObtained !== null && b.marksObtained !== null) {
+            if (a.marksObtained >= 0 && b.marksObtained >= 0) return b.marksObtained - a.marksObtained;
+            if (a.marksObtained >= 0) return -1;
+            if (b.marksObtained >= 0) return 1;
+            return a.studentName.localeCompare(b.studentName);
+          }
+          if (a.marksObtained !== null) return -1;
+          if (b.marksObtained !== null) return 1;
+          return a.studentName.localeCompare(b.studentName);
+        });
+
+        setResults(updatedWithIds);
+      } else {
+        // If everything was deleted or none was upserted
+        const clearedResults = finalRanked.map(r => {
+          if (r.id && !r.id.startsWith('temp-') && r.marksObtained === null) {
+            return {
+              ...r,
+              id: `temp-${r.enrollmentId}`
+            };
+          }
+          return r;
+        });
+        setResults(clearedResults);
+      }
+
       setIsEditingMarks(false);
     } catch (err) {
       console.error(err);
@@ -419,14 +579,14 @@ export default function ExamsPage() {
             </div>
 
             {/* Test Average metrics cards */}
-            {!isEditingMarks && results.length > 0 && (
+            {!isEditingMarks && results.filter(r => r.marksObtained !== null && r.marksObtained >= 0).length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                 <div className="card" style={{ margin: 0, padding: '12px 16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <Trophy size={16} style={{ color: 'var(--primary-orange)' }} />
                   <div>
                     <span className="caption">Class High</span>
                     <p style={{ fontWeight: '700', fontSize: '15px' }}>
-                      {Math.max(...results.map(r => r.marksObtained))}/{selectedExam.maxMarks}
+                      {Math.max(...results.filter(r => r.marksObtained !== null && r.marksObtained >= 0).map(r => r.marksObtained as number))}/{selectedExam.maxMarks}
                     </p>
                   </div>
                 </div>
@@ -435,7 +595,7 @@ export default function ExamsPage() {
                   <div>
                     <span className="caption">Class Average</span>
                     <p style={{ fontWeight: '700', fontSize: '15px' }}>
-                      {(results.reduce((acc, curr) => acc + curr.marksObtained, 0) / results.length).toFixed(1)}/{selectedExam.maxMarks}
+                      {(results.filter(r => r.marksObtained !== null && r.marksObtained >= 0).reduce((acc, curr) => acc + (curr.marksObtained as number), 0) / results.filter(r => r.marksObtained !== null && r.marksObtained >= 0).length).toFixed(1)}/{selectedExam.maxMarks}
                     </p>
                   </div>
                 </div>
@@ -458,39 +618,55 @@ export default function ExamsPage() {
                   {results.length === 0 ? (
                     <tr>
                       <td colSpan={5} style={{ textAlign: 'center', padding: '24px' }} className="secondary-text">
-                        No marks recorded for this test. Click "Enter Student Marks" to begin.
+                        No students enrolled in this batch for {selectedExam.subjectName}.
                       </td>
                     </tr>
                   ) : (
                     results.map((item) => (
                       <tr key={item.enrollmentId}>
-                        <td style={{ fontWeight: '700' }}>#{item.rank}</td>
+                        <td style={{ fontWeight: '700' }}>{item.rank && item.rank > 0 ? `#${item.rank}` : '—'}</td>
                         <td style={{ fontWeight: '600', color: 'var(--primary-orange)' }}>{item.studentCode}</td>
                         <td style={{ fontWeight: '500' }}>{item.studentName}</td>
                         <td>
                           {isEditingMarks ? (
                             <input
-                              type="number"
+                              type="text"
                               className="form-control"
-                              style={{ width: '80px', padding: '4px 8px', minHeight: '30px' }}
-                              value={editableResults[item.enrollmentId] || ''}
-                              max={selectedExam.maxMarks}
-                              min={0}
+                              style={{
+                                width: '110px',
+                                padding: '4px 8px',
+                                minHeight: '30px',
+                                borderColor: isInputInvalid(editableResults[item.enrollmentId], selectedExam.maxMarks) ? 'red' : 'var(--border-color)'
+                              }}
+                              value={editableResults[item.enrollmentId] ?? ''}
+                              placeholder="Marks or Absent"
                               onChange={(e) => setEditableResults({
                                 ...editableResults,
                                 [item.enrollmentId]: e.target.value
                               })}
                             />
                           ) : (
-                            <span style={{ fontWeight: '600' }}>{item.marksObtained}</span>
+                            <span style={{
+                              fontWeight: '600',
+                              color: item.marksObtained === null ? 'var(--text-disabled)' : item.marksObtained < 0 ? 'red' : 'var(--text-primary)'
+                            }}>
+                              {item.marksObtained === null ? '—' : item.marksObtained < 0 ? 'Absent' : item.marksObtained}
+                            </span>
                           )}
                         </td>
-                        <td style={{ fontWeight: '600' }}>{item.percentage.toFixed(1)}%</td>
+                        <td style={{ fontWeight: '600' }}>
+                          {item.percentage === null || item.marksObtained === -1 ? '—' : `${item.percentage.toFixed(1)}%`}
+                        </td>
                       </tr>
                     ))
                   )}
                 </tbody>
               </table>
+              {isEditingMarks && (
+                <div className="caption" style={{ marginTop: '8px', color: 'var(--text-secondary)' }}>
+                  * Enter numerical marks (e.g. <code>45</code>), leave blank to un-submit, or enter <code>Absent</code>, <code>A</code>, or <code>ab</code> to mark the student as absent.
+                </div>
+              )}
             </div>
 
           </div>
