@@ -87,113 +87,201 @@ const academicPdfStyles = StyleSheet.create({
   title: { fontSize: 22, fontWeight: 'bold', color: '#111827', letterSpacing: -0.5 },
   subtitle: { fontSize: 11, color: '#6B7280', marginTop: 4, textTransform: 'uppercase', letterSpacing: 1 },
   section: { marginBottom: 20 },
-  sectionTitle: { fontSize: 12, fontWeight: 'bold', color: '#111827', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingBottom: 6, marginBottom: 8 },
+  sectionTitle: { fontSize: 12, fontWeight: 'bold', color: '#111827', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingBottom: 6, marginBottom: 10 },
   row: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', padding: 6, alignItems: 'center' },
   headerRow: { flexDirection: 'row', backgroundColor: '#F9FAFB', padding: 6, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   label: { width: 140, color: '#6B7280', fontWeight: 'medium' },
   value: { flex: 1, color: '#111827', fontWeight: 'bold' },
-  cellSubject: { width: 120, fontSize: 10 },
-  cellNumber: { width: 60, fontSize: 10, textAlign: 'center' },
-  cellPct: { width: 70, fontSize: 10, textAlign: 'center', fontWeight: 'bold' },
+  cellSubject: { width: 100, fontSize: 10 },
+  cellNumber: { width: 50, fontSize: 10, textAlign: 'center' },
+  cellPct: { width: 60, fontSize: 10, textAlign: 'center', fontWeight: 'bold' },
+  cellMarks: { width: 90, fontSize: 10, textAlign: 'center', fontWeight: 'bold' },
   overallRow: { flexDirection: 'row', padding: 8, backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A', borderRadius: 4, marginTop: 8 },
   footer: { position: 'absolute', bottom: 40, left: 40, right: 40, borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingTop: 12, textAlign: 'center' },
-  footerText: { fontSize: 8, color: '#9CA3AF' }
+  footerText: { fontSize: 8, color: '#9CA3AF' },
+  // Bar chart styles
+  barRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 0 },
+  barLabel: { width: 80, fontSize: 10, color: '#374151', textAlign: 'right', paddingRight: 8 },
+  barTrack: { flex: 1, height: 14, backgroundColor: '#F3F4F6', borderRadius: 3, overflow: 'hidden', position: 'relative' },
+  barPctLabel: { width: 50, fontSize: 10, fontWeight: 'bold', textAlign: 'left', paddingLeft: 8 }
 });
 
 // PDF Document Component for Academic History
 const AcademicHistoryPDF = ({ 
-  studentName, studentCode, batchName, className,
+  studentName, studentCode, batchName, className, school,
   subjectAttendance, overallAttendance,
   examScores
 }: { 
-  studentName: string; studentCode: string; batchName: string; className: string;
+  studentName: string; studentCode: string; batchName: string; className: string; school: string;
   subjectAttendance: SubjectAttendance[]; overallAttendance: number | null;
   examScores: any[];
-}) => (
-  <Document>
-    <PdfPage size="A4" style={academicPdfStyles.page}>
-      <View style={academicPdfStyles.header}>
-        <Text style={academicPdfStyles.title}>SHIKSHARTHI COACHING INSTITUTE</Text>
-        <Text style={academicPdfStyles.subtitle}>Academic History Report</Text>
-      </View>
+}) => {
+  const getBarColor = (pct: number) => pct >= 75 ? '#16A34A' : pct >= 60 ? '#D97706' : '#DC2626';
+  return (
+    <Document>
+      <PdfPage size="A4" style={academicPdfStyles.page}>
+        <View style={academicPdfStyles.header}>
+          <Text style={academicPdfStyles.title}>SHIKSHARTHI COACHING INSTITUTE</Text>
+          <Text style={academicPdfStyles.subtitle}>Academic History Report</Text>
+        </View>
 
-      <View style={academicPdfStyles.section}>
-        <Text style={academicPdfStyles.sectionTitle}>Student Profile</Text>
-        <View style={academicPdfStyles.row}>
-          <Text style={academicPdfStyles.label}>Student Name</Text>
-          <Text style={academicPdfStyles.value}>{studentName}</Text>
-        </View>
-        <View style={academicPdfStyles.row}>
-          <Text style={academicPdfStyles.label}>Student Code</Text>
-          <Text style={academicPdfStyles.value}>{studentCode}</Text>
-        </View>
-        <View style={academicPdfStyles.row}>
-          <Text style={academicPdfStyles.label}>Class / Batch</Text>
-          <Text style={academicPdfStyles.value}>Class {className} — {batchName}</Text>
-        </View>
-      </View>
-
-      <View style={academicPdfStyles.section}>
-        <Text style={academicPdfStyles.sectionTitle}>Subject-wise Attendance</Text>
-        <View style={academicPdfStyles.headerRow}>
-          <Text style={[academicPdfStyles.cellSubject, { fontWeight: 'bold', color: '#374151' }]}>Subject</Text>
-          <Text style={[academicPdfStyles.cellNumber, { fontWeight: 'bold', color: '#374151' }]}>Total</Text>
-          <Text style={[academicPdfStyles.cellNumber, { fontWeight: 'bold', color: '#374151' }]}>Present</Text>
-          <Text style={[academicPdfStyles.cellNumber, { fontWeight: 'bold', color: '#374151' }]}>Absent</Text>
-          <Text style={[academicPdfStyles.cellNumber, { fontWeight: 'bold', color: '#374151' }]}>Leave</Text>
-          <Text style={[academicPdfStyles.cellPct, { fontWeight: 'bold', color: '#374151' }]}>%</Text>
-        </View>
-        {subjectAttendance.map((sa, i) => (
-          <View key={i} style={academicPdfStyles.row}>
-            <Text style={academicPdfStyles.cellSubject}>{sa.subject}</Text>
-            <Text style={academicPdfStyles.cellNumber}>{sa.totalClasses}</Text>
-            <Text style={academicPdfStyles.cellNumber}>{sa.present}</Text>
-            <Text style={academicPdfStyles.cellNumber}>{sa.absent}</Text>
-            <Text style={academicPdfStyles.cellNumber}>{sa.leave}</Text>
-            <Text style={academicPdfStyles.cellPct}>{sa.percentage.toFixed(1)}%</Text>
+        {/* Student Profile */}
+        <View style={academicPdfStyles.section}>
+          <Text style={academicPdfStyles.sectionTitle}>Student Profile</Text>
+          <View style={academicPdfStyles.row}>
+            <Text style={academicPdfStyles.label}>Student Name</Text>
+            <Text style={academicPdfStyles.value}>{studentName}</Text>
           </View>
-        ))}
-        {overallAttendance !== null && (
-          <View style={academicPdfStyles.overallRow}>
-            <Text style={[academicPdfStyles.cellSubject, { fontWeight: 'bold' }]}>Overall Average</Text>
-            <Text style={academicPdfStyles.cellNumber}>{subjectAttendance.reduce((a, s) => a + s.totalClasses, 0)}</Text>
-            <Text style={academicPdfStyles.cellNumber}>{subjectAttendance.reduce((a, s) => a + s.present, 0)}</Text>
-            <Text style={academicPdfStyles.cellNumber}>{subjectAttendance.reduce((a, s) => a + s.absent, 0)}</Text>
-            <Text style={academicPdfStyles.cellNumber}>{subjectAttendance.reduce((a, s) => a + s.leave, 0)}</Text>
-            <Text style={[academicPdfStyles.cellPct, { color: '#D97706' }]}>{overallAttendance.toFixed(1)}%</Text>
+          <View style={academicPdfStyles.row}>
+            <Text style={academicPdfStyles.label}>Student Code</Text>
+            <Text style={academicPdfStyles.value}>{studentCode}</Text>
+          </View>
+          {school ? (
+            <View style={academicPdfStyles.row}>
+              <Text style={academicPdfStyles.label}>School</Text>
+              <Text style={academicPdfStyles.value}>{school}</Text>
+            </View>
+          ) : null}
+          <View style={academicPdfStyles.row}>
+            <Text style={academicPdfStyles.label}>Class</Text>
+            <Text style={academicPdfStyles.value}>Class {className}</Text>
+          </View>
+          <View style={academicPdfStyles.row}>
+            <Text style={academicPdfStyles.label}>Batch</Text>
+            <Text style={academicPdfStyles.value}>{batchName}</Text>
+          </View>
+        </View>
+
+        {/* Subject-wise Attendance Table */}
+        <View style={academicPdfStyles.section}>
+          <Text style={academicPdfStyles.sectionTitle}>Subject-wise Attendance</Text>
+          <View style={academicPdfStyles.headerRow}>
+            <Text style={[academicPdfStyles.cellSubject, { fontWeight: 'bold', color: '#374151' }]}>Subject</Text>
+            <Text style={[academicPdfStyles.cellNumber, { fontWeight: 'bold', color: '#374151' }]}>Total</Text>
+            <Text style={[academicPdfStyles.cellNumber, { fontWeight: 'bold', color: '#374151' }]}>Present</Text>
+            <Text style={[academicPdfStyles.cellNumber, { fontWeight: 'bold', color: '#374151' }]}>Absent</Text>
+            <Text style={[academicPdfStyles.cellNumber, { fontWeight: 'bold', color: '#374151' }]}>Leave</Text>
+            <Text style={[academicPdfStyles.cellPct, { fontWeight: 'bold', color: '#374151' }]}>%</Text>
+          </View>
+          {subjectAttendance.length === 0 ? (
+            <View style={academicPdfStyles.row}>
+              <Text style={{ color: '#9CA3AF', textAlign: 'center', flex: 1 }}>No attendance data recorded yet.</Text>
+            </View>
+          ) : (
+            subjectAttendance.map((sa, i) => (
+              <View key={i} style={academicPdfStyles.row}>
+                <Text style={academicPdfStyles.cellSubject}>{sa.subject}</Text>
+                <Text style={academicPdfStyles.cellNumber}>{sa.totalClasses}</Text>
+                <Text style={academicPdfStyles.cellNumber}>{sa.present}</Text>
+                <Text style={academicPdfStyles.cellNumber}>{sa.absent}</Text>
+                <Text style={academicPdfStyles.cellNumber}>{sa.leave}</Text>
+                <Text style={[academicPdfStyles.cellPct, { color: getBarColor(sa.percentage) }]}>{sa.percentage.toFixed(1)}%</Text>
+              </View>
+            ))
+          )}
+          {overallAttendance !== null && (
+            <View style={academicPdfStyles.overallRow}>
+              <Text style={[academicPdfStyles.cellSubject, { fontWeight: 'bold' }]}>Overall Average</Text>
+              <Text style={academicPdfStyles.cellNumber}>{subjectAttendance.reduce((a, s) => a + s.totalClasses, 0)}</Text>
+              <Text style={academicPdfStyles.cellNumber}>{subjectAttendance.reduce((a, s) => a + s.present, 0)}</Text>
+              <Text style={academicPdfStyles.cellNumber}>{subjectAttendance.reduce((a, s) => a + s.absent, 0)}</Text>
+              <Text style={academicPdfStyles.cellNumber}>{subjectAttendance.reduce((a, s) => a + s.leave, 0)}</Text>
+              <Text style={[academicPdfStyles.cellPct, { color: '#D97706', fontWeight: 'bold' }]}>{overallAttendance.toFixed(1)}%</Text>
+            </View>
+          )}
+        </View>
+
+        {/* Attendance Visual Bar Chart */}
+        {subjectAttendance.length > 0 && (
+          <View style={academicPdfStyles.section}>
+            <Text style={academicPdfStyles.sectionTitle}>Attendance Overview (Visual)</Text>
+            {subjectAttendance.map((sa, i) => (
+              <View key={i} style={academicPdfStyles.barRow}>
+                <Text style={academicPdfStyles.barLabel}>{sa.subject}</Text>
+                <View style={academicPdfStyles.barTrack}>
+                  <View style={{ 
+                    position: 'absolute', top: 0, left: 0, bottom: 0,
+                    width: `${Math.min(sa.percentage, 100)}%`,
+                    backgroundColor: getBarColor(sa.percentage),
+                    borderRadius: 3
+                  }} />
+                </View>
+                <Text style={[academicPdfStyles.barPctLabel, { color: getBarColor(sa.percentage) }]}>{sa.percentage.toFixed(1)}%</Text>
+              </View>
+            ))}
+            {/* Overall bar */}
+            {overallAttendance !== null && (
+              <View style={[academicPdfStyles.barRow, { marginTop: 4, paddingTop: 6, borderTopWidth: 1, borderTopColor: '#E5E7EB' }]}>
+                <Text style={[academicPdfStyles.barLabel, { fontWeight: 'bold' }]}>Overall</Text>
+                <View style={academicPdfStyles.barTrack}>
+                  <View style={{ 
+                    position: 'absolute', top: 0, left: 0, bottom: 0,
+                    width: `${Math.min(overallAttendance, 100)}%`,
+                    backgroundColor: '#F59E0B',
+                    borderRadius: 3
+                  }} />
+                </View>
+                <Text style={[academicPdfStyles.barPctLabel, { color: '#D97706', fontWeight: 'bold' }]}>{overallAttendance.toFixed(1)}%</Text>
+              </View>
+            )}
           </View>
         )}
-      </View>
 
-      {examScores.length > 0 && (
+        {/* Examination Record - always shown */}
         <View style={academicPdfStyles.section}>
           <Text style={academicPdfStyles.sectionTitle}>Examination Record</Text>
-          <View style={academicPdfStyles.headerRow}>
-            <Text style={[academicPdfStyles.cellSubject, { fontWeight: 'bold', color: '#374151' }]}>Date</Text>
-            <Text style={[academicPdfStyles.cellSubject, { fontWeight: 'bold', color: '#374151' }]}>Subject</Text>
-            <Text style={[academicPdfStyles.cellSubject, { fontWeight: 'bold', color: '#374151' }]}>Exam</Text>
-            <Text style={[academicPdfStyles.cellPct, { fontWeight: 'bold', color: '#374151' }]}>Marks</Text>
-            <Text style={[academicPdfStyles.cellNumber, { fontWeight: 'bold', color: '#374151' }]}>Rank</Text>
-          </View>
-          {examScores.map((score, i) => (
-            <View key={i} style={academicPdfStyles.row}>
-              <Text style={academicPdfStyles.cellSubject}>{score.date}</Text>
-              <Text style={academicPdfStyles.cellSubject}>{score.subject}</Text>
-              <Text style={academicPdfStyles.cellSubject}>{score.name}</Text>
-              <Text style={academicPdfStyles.cellPct}>{score.score}</Text>
-              <Text style={academicPdfStyles.cellNumber}>{score.rank}</Text>
+          {examScores.length === 0 ? (
+            <View style={academicPdfStyles.row}>
+              <Text style={{ color: '#9CA3AF', textAlign: 'center', flex: 1 }}>No exam scores recorded yet.</Text>
             </View>
-          ))}
+          ) : (
+            <>
+              <View style={academicPdfStyles.headerRow}>
+                <Text style={[academicPdfStyles.cellSubject, { fontWeight: 'bold', color: '#374151' }]}>Date</Text>
+                <Text style={[academicPdfStyles.cellSubject, { fontWeight: 'bold', color: '#374151' }]}>Subject</Text>
+                <Text style={[academicPdfStyles.cellSubject, { fontWeight: 'bold', color: '#374151' }]}>Exam Name</Text>
+                <Text style={[academicPdfStyles.cellMarks, { fontWeight: 'bold', color: '#374151' }]}>Marks</Text>
+                <Text style={[academicPdfStyles.cellNumber, { fontWeight: 'bold', color: '#374151' }]}>Rank</Text>
+              </View>
+              {examScores.map((score, i) => (
+                <View key={i} style={academicPdfStyles.row}>
+                  <Text style={academicPdfStyles.cellSubject}>{score.date}</Text>
+                  <Text style={academicPdfStyles.cellSubject}>{score.subject}</Text>
+                  <Text style={academicPdfStyles.cellSubject}>{score.name}</Text>
+                  <Text style={academicPdfStyles.cellMarks}>{score.score}</Text>
+                  <Text style={academicPdfStyles.cellNumber}>{score.rank}</Text>
+                </View>
+              ))}
+            </>
+          )}
         </View>
-      )}
 
-      <View style={academicPdfStyles.footer}>
-        <Text style={academicPdfStyles.footerText}>This is a computer-generated academic report issued by Shiksharthi OS.</Text>
-        <Text style={[academicPdfStyles.footerText, { marginTop: 4 }]}>Generated on {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}.</Text>
-      </View>
-    </PdfPage>
-  </Document>
-);
+        <View style={academicPdfStyles.footer}>
+          <Text style={academicPdfStyles.footerText}>This is a computer-generated academic report issued by Shiksharthi OS.</Text>
+          <Text style={[academicPdfStyles.footerText, { marginTop: 4 }]}>Generated on {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}.</Text>
+        </View>
+      </PdfPage>
+    </Document>
+  );
+};
+
+// Helper to match subject name from attendance/exams with enrolled subject name, ignoring (Board)/(JEE)/(NEET) suffixes
+function getEnrolledSubjectName(subjectName: string, enrolledSubjects: string[]): string {
+  if (!subjectName) return '';
+  if (!enrolledSubjects || enrolledSubjects.length === 0) return subjectName;
+  
+  // 1. Try exact match
+  if (enrolledSubjects.includes(subjectName)) {
+    return subjectName;
+  }
+  
+  // 2. Try match after removing suffixes from both sides
+  const clean = (name: string) => name.replace(/\s*\((Board|JEE|NEET)\)/i, '').trim().toLowerCase();
+  const cleanSubject = clean(subjectName);
+  
+  const matched = enrolledSubjects.find(s => clean(s) === cleanSubject);
+  return matched || subjectName;
+}
 
 export default function StudentsPage() {
   const supabase = createClient();
@@ -1328,10 +1416,11 @@ function StudentDetailModal({
 
         if (attData && attData.length > 0) {
           // Get subjects from enrollment, plus any additional from attendance data
-          const enrolledSubjects = new Set<string>(student.subjects_taken || []);
+          const enrolledSubjectsList = student.subjects_taken || [];
+          const enrolledSubjects = new Set<string>(enrolledSubjectsList);
           attData.forEach((a: any) => {
             if (a.class_sessions?.subject_name) {
-              enrolledSubjects.add(a.class_sessions.subject_name);
+              enrolledSubjects.add(getEnrolledSubjectName(a.class_sessions.subject_name, enrolledSubjectsList));
             }
           });
 
@@ -1340,8 +1429,9 @@ function StudentDetailModal({
           enrolledSubjects.forEach(subj => subjectMap.set(subj, { present: 0, absent: 0, leave: 0, total: 0 }));
 
           attData.forEach((a: any) => {
-            const subj = a.class_sessions?.subject_name;
-            if (!subj) return;
+            const rawSubj = a.class_sessions?.subject_name;
+            if (!rawSubj) return;
+            const subj = getEnrolledSubjectName(rawSubj, enrolledSubjectsList);
             if (!subjectMap.has(subj)) {
               subjectMap.set(subj, { present: 0, absent: 0, leave: 0, total: 0 });
             }
@@ -1423,7 +1513,7 @@ function StudentDetailModal({
           
           const scores = resultsData.map((r: any) => ({
             date: r.exams?.date || '',
-            subject: r.exams?.subject_name || '',
+            subject: getEnrolledSubjectName(r.exams?.subject_name || '', student.subjects_taken || []),
             name: r.exams?.name || '',
             score: parseFloat(r.marks_obtained) < 0 
               ? 'Absent' 
@@ -2005,6 +2095,7 @@ function StudentDetailModal({
                         studentCode={student.student_code}
                         batchName={student.batch_name}
                         className={student.class}
+                        school={student.school || ''}
                         subjectAttendance={subjectAttendance}
                         overallAttendance={overallAttendance}
                         examScores={examScores}

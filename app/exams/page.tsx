@@ -375,21 +375,17 @@ export default function ExamsPage() {
       }
 
       // Identify records to upsert (any record that has non-null marksObtained)
+      // NOTE: Never include 'id' in the upsert — only rely on exam_id+enrollment_id conflict key.
+      // Including 'id' causes Supabase to match on PK and break updates on second save.
       const dbUpsertData = finalRanked
         .filter(r => r.marksObtained !== null)
-        .map(r => {
-          const item: any = {
-            exam_id: selectedExam.id,
-            enrollment_id: r.enrollmentId,
-            marks_obtained: r.marksObtained,
-            percentage: r.percentage,
-            rank_in_batch: r.rank
-          };
-          if (r.id && !r.id.startsWith('temp-')) {
-            item.id = r.id;
-          }
-          return item;
-        });
+        .map(r => ({
+          exam_id: selectedExam.id,
+          enrollment_id: r.enrollmentId,
+          marks_obtained: r.marksObtained,
+          percentage: r.percentage,
+          rank_in_batch: r.rank
+        }));
 
       if (dbUpsertData.length > 0) {
         const { data, error } = await supabase
@@ -569,7 +565,21 @@ export default function ExamsPage() {
                   <button
                     className="btn btn-secondary"
                     style={{ gap: '6px', minHeight: '38px', padding: '6px 14px' }}
-                    onClick={() => setIsEditingMarks(true)}
+                    onClick={() => {
+                      // Re-initialize editable fields from current results so values are always fresh
+                      const freshEditable: { [id: string]: string } = {};
+                      results.forEach(r => {
+                        if (r.marksObtained === null) {
+                          freshEditable[r.enrollmentId] = '';
+                        } else if (r.marksObtained === -1) {
+                          freshEditable[r.enrollmentId] = 'Absent';
+                        } else {
+                          freshEditable[r.enrollmentId] = r.marksObtained.toString();
+                        }
+                      });
+                      setEditableResults(freshEditable);
+                      setIsEditingMarks(true);
+                    }}
                   >
                     <Edit size={16} />
                     <span>Enter Student Marks</span>
