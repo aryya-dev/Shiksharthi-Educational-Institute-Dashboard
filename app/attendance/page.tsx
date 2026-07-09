@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { 
   Check, 
   X, 
   UserMinus, 
-  Save, 
   Calendar, 
   BookOpen, 
   CheckCircle,
@@ -14,10 +13,19 @@ import {
   ChevronRight,
   RotateCcw,
   User,
-  MapPin
+  MapPin,
+  FileText,
+  ClipboardCheck,
+  ChevronDown,
+  ChevronUp,
+  BookMarked,
+  StickyNote,
+  AlertTriangle
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { createClient } from '@/utils/supabase/client';
+
+/* ─── Types ─────────────────────────────────────────────────────────────── */
 
 interface StudentAttendanceItem {
   enrollmentId: string;
@@ -30,8 +38,8 @@ interface StudentAttendanceItem {
 }
 
 interface ScheduledClassItem {
-  key: string; // unique key: time+room+faculty+subject
-  timeSlot: string; // "17:00 - 19:00"
+  key: string;
+  timeSlot: string;
   startTime: string;
   endTime: string;
   subject: string;
@@ -40,11 +48,13 @@ interface ScheduledClassItem {
   roomId: string;
   roomName: string;
   batches: { id: string; name: string }[];
-  scheduleIds: string[]; // DB ids of the schedule rows
+  scheduleIds: string[];
   isExtra: boolean;
   extraSessionId?: string;
   attendanceStatus: 'pending' | 'marked';
 }
+
+/* ─── Component ─────────────────────────────────────────────────────────── */
 
 export default function AttendancePage() {
   const supabase = createClient();
@@ -71,14 +81,40 @@ export default function AttendancePage() {
   const [manualRoomId, setManualRoomId] = useState('');
   const [manualStartTime, setManualStartTime] = useState('16:30');
   const [manualEndTime, setManualEndTime] = useState('18:30');
-  const [chapterCovered, setChapterCovered] = useState('');
-  const [sessionNotes, setSessionNotes] = useState('');
   const [isExtraClass, setIsExtraClass] = useState(false);
+
+  // --- Chapter Covered (mandatory) ---
+  const [chapterCovered, setChapterCovered] = useState('');
+  const [chapterError, setChapterError] = useState(false);
+
+  // --- Homework fields (optional) ---
+  const [homeworkTitle, setHomeworkTitle] = useState('');
+  const [homeworkDescription, setHomeworkDescription] = useState('');
+  const [homeworkDueDate, setHomeworkDueDate] = useState('');
+  const [homeworkExpanded, setHomeworkExpanded] = useState(false);
+  const [homeworkDueDateError, setHomeworkDueDateError] = useState(false);
+
+  // --- Homework Defaulters ---
+  const [homeworkDefaulters, setHomeworkDefaulters] = useState<Set<string>>(new Set());
+  const [defaultersExpanded, setDefaultersExpanded] = useState(false);
+
+  // --- Faculty Notes ---
+  const [facultyNotes, setFacultyNotes] = useState('');
 
   // --- Student List ---
   const [studentList, setStudentList] = useState<StudentAttendanceItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // --- Active step tracking ---
+  const [activeStep, setActiveStep] = useState<number>(1); // 1=attendance, 2=chapter+homework, 3=defaulters+notes
+
+  // Derived: present students for defaulters list
+  const presentStudents = useMemo(() => 
+    studentList.filter(s => s.status === 'Present'),
+    [studentList]
+  );
 
   // Set today's date as default
   useEffect(() => {
@@ -109,16 +145,16 @@ export default function AttendancePage() {
     setSelectedClass(null);
     setStudentList([]);
     setSuccessMsg(null);
+    setErrorMsg(null);
+    resetFormFields();
 
     try {
-      // Day of week: Date() gives 0=Sun..6=Sat; DB uses 1=Mon..7=Sun
       const dayOfWeek = (() => {
         const d = new Date(date + 'T00:00:00');
-        const jsDay = d.getDay(); // 0=Sun
-        return jsDay === 0 ? 7 : jsDay; // convert to 1=Mon..7=Sun
+        const jsDay = d.getDay();
+        return jsDay === 0 ? 7 : jsDay;
       })();
 
-      // 1. Fetch recurring schedules for this day
       const { data: scheduleData } = await supabase
         .from('schedules')
         .select('*, batches(id, name, branch_id, academic_year_id), rooms(id, name), faculty(id, name)')
@@ -126,7 +162,6 @@ export default function AttendancePage() {
         .eq('academic_year_id', currentAcademicYear.id)
         .eq('day_of_week', dayOfWeek);
 
-      // 2. Fetch extra sessions for this specific date
       const { data: extraData } = await supabase
         .from('class_sessions')
         .select('*, batches!inner(id, name, branch_id, academic_year_id), rooms(id, name), faculty(id, name)')
@@ -135,7 +170,6 @@ export default function AttendancePage() {
         .eq('batches.branch_id', currentBranch.id)
         .eq('batches.academic_year_id', currentAcademicYear.id);
 
-      // 3. Fetch already-marked sessions for this date to determine status
       const { data: markedSessions } = await supabase
         .from('class_sessions')
         .select('id, batch_id, subject_name, start_time, end_time, room_id, faculty_id')
@@ -147,7 +181,6 @@ export default function AttendancePage() {
         markedKeys.add(key);
       });
 
-      // Build grouped schedule items from recurring schedules
       const groupedMap: { [key: string]: ScheduledClassItem } = {};
 
       (scheduleData || []).forEach((s: any) => {
@@ -174,7 +207,6 @@ export default function AttendancePage() {
         groupedMap[timeSlotKey].scheduleIds.push(s.id);
       });
 
-      // Build extra class items
       const extraItems: ScheduledClassItem[] = (extraData || []).map((s: any) => {
         const markedKey = `${s.start_time?.slice(0, 5)}-${s.end_time?.slice(0, 5)}-${s.room_id}-${s.faculty_id}-${s.subject_name}`;
         return {
@@ -212,7 +244,7 @@ export default function AttendancePage() {
     loadScheduledClasses();
   }, [loadScheduledClasses]);
 
-  // Load students when a class is selected — filtered by subject enrollment
+  // Load students when a class is selected
   useEffect(() => {
     async function loadStudents() {
       const batchIds = selectedClass
@@ -234,10 +266,6 @@ export default function AttendancePage() {
 
         const list: StudentAttendanceItem[] = (data || [])
           .filter((e: any) => {
-            // subjects_taken stores values like "Physics (Board)", "Biology (Board)"
-            // schedule subject is plain like "Physics", "Biology", "Mathematics"
-            // Match if subjects_taken is empty (legacy fallback) OR if any taken
-            // subject starts with the scheduled subject name (case-insensitive)
             const taken: string[] = e.subjects_taken || [];
             if (taken.length === 0) return true;
             const subjectLower = effectiveSubject.toLowerCase();
@@ -262,6 +290,32 @@ export default function AttendancePage() {
     loadStudents();
   }, [selectedClass, manualMode, manualBatchIds, manualSubject]);
 
+  // Clear defaulters when attendance changes
+  useEffect(() => {
+    setHomeworkDefaulters(prev => {
+      const presentIds = new Set(presentStudents.map(s => s.enrollmentId));
+      const newDefaults = new Set<string>();
+      prev.forEach(id => {
+        if (presentIds.has(id)) newDefaults.add(id);
+      });
+      return newDefaults;
+    });
+  }, [presentStudents]);
+
+  const resetFormFields = () => {
+    setChapterCovered('');
+    setChapterError(false);
+    setHomeworkTitle('');
+    setHomeworkDescription('');
+    setHomeworkDueDate('');
+    setHomeworkDueDateError(false);
+    setHomeworkExpanded(false);
+    setHomeworkDefaulters(new Set());
+    setDefaultersExpanded(false);
+    setFacultyNotes('');
+    setActiveStep(1);
+  };
+
   const handleMarkAll = (status: 'Present' | 'Absent') => {
     setStudentList(studentList.map(st => {
       if (st.preExistingLeave) return st;
@@ -275,11 +329,47 @@ export default function AttendancePage() {
     ));
   };
 
+  const handleToggleDefaulter = (enrollmentId: string) => {
+    setHomeworkDefaulters(prev => {
+      const next = new Set(prev);
+      if (next.has(enrollmentId)) {
+        next.delete(enrollmentId);
+      } else {
+        next.add(enrollmentId);
+      }
+      return next;
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (studentList.length === 0) return;
+
+    // Validation
+    let hasError = false;
+
+    if (!chapterCovered.trim()) {
+      setChapterError(true);
+      hasError = true;
+    } else {
+      setChapterError(false);
+    }
+
+    if (homeworkTitle.trim() && !homeworkDueDate) {
+      setHomeworkDueDateError(true);
+      hasError = true;
+    } else {
+      setHomeworkDueDateError(false);
+    }
+
+    if (hasError) {
+      setErrorMsg('Please fix the highlighted errors before submitting.');
+      return;
+    }
+
     setSubmitting(true);
     setSuccessMsg(null);
+    setErrorMsg(null);
 
     const effectiveBatchIds = selectedClass
       ? selectedClass.batches.map(b => b.id)
@@ -292,66 +382,50 @@ export default function AttendancePage() {
     const effectiveEnd = selectedClass ? `${selectedClass.endTime}:00` : `${manualEndTime}:00`;
     const effectiveIsExtra = selectedClass ? selectedClass.isExtra : isExtraClass;
 
+    // Build attendance array for RPC
+    const attendancePayload = studentList.map(st => ({
+      enrollment_id: st.enrollmentId,
+      status: st.status,
+      batch_id: st.batchId,
+      student_name: st.name
+    }));
+
     try {
-      // Insert one class_session per batch, then attach attendance
-      for (const batchId of effectiveBatchIds) {
-        const { data: session, error: sErr } = await supabase
-          .from('class_sessions')
-          .insert({
-            batch_id: batchId,
-            subject_name: effectiveSubject,
-            faculty_id: effectiveFacultyId,
-            room_id: effectiveRoomId,
-            date,
-            start_time: effectiveStart,
-            end_time: effectiveEnd,
-            is_extra_class: effectiveIsExtra,
-            chapter_covered: chapterCovered || null,
-            extra_class_notes: sessionNotes || null
-          })
-          .select()
-          .single();
+      const { data, error } = await supabase.rpc('complete_class', {
+        p_batch_ids: effectiveBatchIds,
+        p_subject_name: effectiveSubject,
+        p_faculty_id: effectiveFacultyId,
+        p_room_id: effectiveRoomId,
+        p_date: date,
+        p_start_time: effectiveStart,
+        p_end_time: effectiveEnd,
+        p_is_extra_class: effectiveIsExtra,
+        p_chapter_covered: chapterCovered.trim(),
+        p_faculty_notes: facultyNotes.trim() || null,
+        p_homework_title: homeworkTitle.trim() || null,
+        p_homework_description: homeworkDescription.trim() || null,
+        p_homework_due_date: homeworkDueDate || null,
+        p_attendance: attendancePayload,
+        p_defaulter_ids: Array.from(homeworkDefaulters),
+        p_academic_year_id: currentAcademicYear!.id,
+        p_branch_id: currentBranch!.id
+      });
 
-        if (sErr) throw sErr;
-
-        // Only insert attendance for students in this batch
-        const batchStudents = studentList.filter(st => st.batchId === batchId);
-        if (batchStudents.length > 0) {
-          const attendanceInserts = batchStudents.map(st => ({
-            enrollment_id: st.enrollmentId,
-            session_id: session.id,
-            status: st.status
-          }));
-          const { error: aErr } = await supabase.from('attendance').insert(attendanceInserts);
-          if (aErr) throw aErr;
-        }
-
-        // Update batch subject's current chapter if provided
-        if (chapterCovered) {
-          await supabase.from('batch_subjects')
-            .update({ current_chapter: chapterCovered })
-            .eq('batch_id', batchId)
-            .eq('subject_name', effectiveSubject);
-        }
-      }
+      if (error) throw error;
 
       const classLabel = selectedClass
         ? selectedClass.batches.map(b => b.name).join(' + ') + ' – ' + selectedClass.subject
         : effectiveBatchIds.map(id => batches.find(b => b.id === id)?.name).join(' + ') + ' – ' + effectiveSubject;
 
-      setSuccessMsg(`Attendance recorded for ${classLabel}.`);
-      setChapterCovered('');
-      setSessionNotes('');
+      setSuccessMsg(`✅ Class completed for ${classLabel}. Report generated.`);
+      resetFormFields();
       
-      // Refresh scheduled classes list to update status
       await loadScheduledClasses();
       setSelectedClass(null);
       setStudentList([]);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setSuccessMsg('Attendance saved (local fallback).');
-      setChapterCovered('');
-      setSessionNotes('');
+      setErrorMsg(err?.message || 'Failed to complete class. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -369,6 +443,10 @@ export default function AttendancePage() {
   const pendingCount = scheduledClasses.filter(c => c.attendanceStatus === 'pending').length;
   const markedCount = scheduledClasses.filter(c => c.attendanceStatus === 'marked').length;
 
+  const presentCount = studentList.filter(s => s.status === 'Present').length;
+  const absentCount = studentList.filter(s => s.status === 'Absent').length;
+  const leaveCount = studentList.filter(s => s.status === 'Leave').length;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
@@ -380,11 +458,19 @@ export default function AttendancePage() {
         </div>
       )}
 
+      {/* Error Banner */}
+      {errorMsg && (
+        <div style={{ width: '100%', borderRadius: 'var(--radius-sm)', padding: '16px var(--space-4)', display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#FEF2F2', border: '1px solid #FEE2E2', color: '#DC2626', fontSize: '14px' }}>
+          <AlertTriangle size={20} />
+          <span>{errorMsg}</span>
+        </div>
+      )}
+
       {/* Top Bar: Date Picker + Summary */}
       <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
         <div className="form-group" style={{ margin: 0, minWidth: '200px' }}>
           <label className="form-label">Date</label>
-          <input type="date" className="form-control" value={date} onChange={e => { setDate(e.target.value); setSelectedClass(null); setStudentList([]); setSuccessMsg(null); }} />
+          <input type="date" className="form-control" value={date} onChange={e => { setDate(e.target.value); setSelectedClass(null); setStudentList([]); setSuccessMsg(null); setErrorMsg(null); resetFormFields(); }} />
         </div>
         {scheduledClasses.length > 0 && (
           <div style={{ display: 'flex', gap: '12px', paddingTop: '22px' }}>
@@ -394,7 +480,7 @@ export default function AttendancePage() {
             </div>
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center', padding: '6px 12px', borderRadius: 'var(--radius-sm)', backgroundColor: '#D1FAE5', color: '#065F46', fontSize: '13px', fontWeight: '600' }}>
               <CheckCircle size={14} />
-              <span>{markedCount} Marked</span>
+              <span>{markedCount} Completed</span>
             </div>
           </div>
         )}
@@ -412,7 +498,7 @@ export default function AttendancePage() {
             <button
               className="btn btn-secondary"
               style={{ padding: '4px 8px', minHeight: '30px', fontSize: '11px', gap: '4px' }}
-              onClick={() => { setManualMode(!manualMode); setSelectedClass(null); setStudentList([]); }}
+              onClick={() => { setManualMode(!manualMode); setSelectedClass(null); setStudentList([]); resetFormFields(); }}
             >
               {manualMode ? <><RotateCcw size={11} /> Show Schedule</> : <><AlertCircle size={11} /> Manual Mode</>}
             </button>
@@ -498,6 +584,8 @@ export default function AttendancePage() {
                       setSelectedClass(isSelected ? null : cls);
                       setStudentList([]);
                       setSuccessMsg(null);
+                      setErrorMsg(null);
+                      resetFormFields();
                     }}
                     style={{
                       display: 'flex',
@@ -513,7 +601,6 @@ export default function AttendancePage() {
                       transition: 'all 0.15s'
                     }}
                   >
-                    {/* Status indicator */}
                     <div style={{ marginTop: '2px', flexShrink: 0 }}>
                       {isMarked
                         ? <CheckCircle size={16} style={{ color: '#10B981' }} />
@@ -521,7 +608,6 @@ export default function AttendancePage() {
                       }
                     </div>
                     <div style={{ flex: 1 }}>
-                      {/* Batch Tags */}
                       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: '4px' }}>
                         {cls.batches.map(b => (
                           <span key={b.id} style={{ fontSize: '10px', fontWeight: '700', padding: '1px 7px', borderRadius: '100px', backgroundColor: isSelected ? 'var(--primary-orange)' : '#E2E8F0', color: isSelected ? '#fff' : 'var(--text-primary)' }}>{b.name}</span>
@@ -543,13 +629,13 @@ export default function AttendancePage() {
           )}
         </div>
 
-        {/* RIGHT: Attendance Marking Panel */}
+        {/* RIGHT: Complete Class Panel */}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {(!selectedClass && !manualMode) ? (
             <div className="card" style={{ margin: 0, padding: '48px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-              <BookOpen size={36} style={{ color: 'var(--text-secondary)', opacity: 0.4 }} />
-              <p style={{ color: 'var(--text-secondary)', fontSize: '15px' }}>Select a class from the left to mark attendance</p>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>or use Manual Mode for unscheduled classes</p>
+              <ClipboardCheck size={36} style={{ color: 'var(--text-secondary)', opacity: 0.4 }} />
+              <p style={{ color: 'var(--text-secondary)', fontSize: '15px' }}>Select a class from the left to complete</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>Attendance, homework, and report will be saved together</p>
             </div>
           ) : (
             <>
@@ -571,25 +657,16 @@ export default function AttendancePage() {
                 </div>
               )}
 
-              {/* Chapter + Notes */}
-              <div className="card" style={{ margin: 0, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Chapter / Topic Covered</label>
-                  <input type="text" className="form-control" placeholder="e.g. Integrals – Lecture 1" value={chapterCovered} onChange={e => setChapterCovered(e.target.value)} />
-                </div>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label className="form-label">Session Notes (optional)</label>
-                  <input type="text" className="form-control" placeholder="Any remarks about this session" value={sessionNotes} onChange={e => setSessionNotes(e.target.value)} />
-                </div>
-              </div>
-
-              {/* Student Marking Grid */}
+              {/* ═══ STEP 1: Attendance Marking ═══ */}
               <div className="card" style={{ margin: 0, padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '14px' }}>
                   <div>
-                    <h3 style={{ fontSize: '16px' }}>Mark Registry</h3>
-                    <span className="caption" style={{ fontSize: '11px' }}>
-                      {studentList.length} students enrolled in {selectedClass?.subject ?? manualSubject} — {studentList.filter(s => s.status === 'Present').length} Present · {studentList.filter(s => s.status === 'Absent').length} Absent · {studentList.filter(s => s.status === 'Leave').length} Leave
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--primary-orange)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '700' }}>1</div>
+                      <h3 style={{ fontSize: '16px' }}>Mark Attendance</h3>
+                    </div>
+                    <span className="caption" style={{ fontSize: '11px', marginLeft: '32px' }}>
+                      {studentList.length} students — {presentCount} Present · {absentCount} Absent · {leaveCount} Leave
                     </span>
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
@@ -604,7 +681,6 @@ export default function AttendancePage() {
                   </p>
                 ) : (
                   <>
-                    {/* Batch grouping headers if mixed batch */}
                     {selectedClass && selectedClass.batches.length > 1 && (
                       <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0 }}>
                         Students are grouped by batch below for clarity.
@@ -648,12 +724,237 @@ export default function AttendancePage() {
                     </div>
                   </>
                 )}
-
-                <button type="submit" className="btn btn-primary" style={{ width: '100%', gap: '8px', marginTop: '4px' }} disabled={submitting || studentList.length === 0}>
-                  <Save size={18} />
-                  <span>{submitting ? 'Saving...' : 'Submit Attendance'}</span>
-                </button>
               </div>
+
+              {/* ═══ STEP 2: Chapter Covered (mandatory) + Homework (optional) ═══ */}
+              <div className="card" style={{ margin: 0, padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--primary-orange)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '700' }}>2</div>
+                  <h3 style={{ fontSize: '16px' }}>Chapter & Homework</h3>
+                </div>
+
+                {/* Chapter Covered - Mandatory */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <BookOpen size={14} />
+                    Chapter / Topic Covered <span style={{ color: 'var(--color-error)' }}>*</span>
+                  </label>
+                  <input 
+                    type="text" 
+                    className="form-control" 
+                    placeholder="e.g. Integrals – Lecture 1" 
+                    value={chapterCovered} 
+                    onChange={e => { setChapterCovered(e.target.value); if (e.target.value.trim()) setChapterError(false); }}
+                    style={chapterError ? { borderColor: 'var(--color-error)', boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.1)' } : {}}
+                  />
+                  {chapterError && (
+                    <span style={{ fontSize: '11px', color: 'var(--color-error)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <AlertTriangle size={11} /> Chapter Covered is required
+                    </span>
+                  )}
+                </div>
+
+                {/* Homework Section - Collapsible */}
+                <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                  <button
+                    type="button"
+                    onClick={() => setHomeworkExpanded(!homeworkExpanded)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: 'none',
+                      backgroundColor: homeworkExpanded ? 'rgba(245, 158, 11, 0.06)' : 'var(--surface-card)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <BookMarked size={16} style={{ color: 'var(--primary-orange)' }} />
+                      <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                        Homework for Next Class
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '400' }}>
+                        (Optional)
+                      </span>
+                      {homeworkTitle.trim() && (
+                        <span style={{ fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '100px', backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                          Assigned
+                        </span>
+                      )}
+                    </div>
+                    {homeworkExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
+                  </button>
+
+                  {homeworkExpanded && (
+                    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--border-color)' }}>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label">Homework Title</label>
+                        <input 
+                          type="text" 
+                          className="form-control" 
+                          placeholder="e.g. Exercise 6" 
+                          value={homeworkTitle} 
+                          onChange={e => setHomeworkTitle(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label">Description</label>
+                        <textarea 
+                          className="form-control" 
+                          placeholder="e.g. Solve Question 1-20" 
+                          value={homeworkDescription} 
+                          onChange={e => setHomeworkDescription(e.target.value)}
+                          rows={2}
+                          style={{ resize: 'vertical', minHeight: '60px' }}
+                        />
+                      </div>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          Due Date {homeworkTitle.trim() && <span style={{ color: 'var(--color-error)' }}>*</span>}
+                        </label>
+                        <input 
+                          type="date" 
+                          className="form-control" 
+                          value={homeworkDueDate} 
+                          onChange={e => { setHomeworkDueDate(e.target.value); if (e.target.value) setHomeworkDueDateError(false); }}
+                          style={homeworkDueDateError ? { borderColor: 'var(--color-error)', boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.1)' } : {}}
+                        />
+                        {homeworkDueDateError && (
+                          <span style={{ fontSize: '11px', color: 'var(--color-error)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <AlertTriangle size={11} /> Due Date is required when homework is assigned
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ═══ STEP 3: Homework Defaulters + Faculty Notes ═══ */}
+              <div className="card" style={{ margin: 0, padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--primary-orange)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '700' }}>3</div>
+                  <h3 style={{ fontSize: '16px' }}>Defaulters & Notes</h3>
+                </div>
+
+                {/* Homework Defaulters */}
+                <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                  <button
+                    type="button"
+                    onClick={() => setDefaultersExpanded(!defaultersExpanded)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      width: '100%',
+                      padding: '12px 16px',
+                      border: 'none',
+                      backgroundColor: defaultersExpanded ? 'rgba(239, 68, 68, 0.04)' : 'var(--surface-card)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <AlertCircle size={16} style={{ color: '#EF4444' }} />
+                      <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                        Homework Defaulters
+                      </span>
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '400' }}>
+                        (from Present students)
+                      </span>
+                      {homeworkDefaulters.size > 0 && (
+                        <span style={{ fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '100px', backgroundColor: '#FEE2E2', color: '#DC2626' }}>
+                          {homeworkDefaulters.size} defaulter{homeworkDefaulters.size > 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                    {defaultersExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
+                  </button>
+
+                  {defaultersExpanded && (
+                    <div style={{ borderTop: '1px solid var(--border-color)', padding: '12px 16px' }}>
+                      {presentStudents.length === 0 ? (
+                        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center', padding: '12px 0' }}>
+                          No present students. Mark attendance first.
+                        </p>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '240px', overflowY: 'auto' }}>
+                          {presentStudents.map(student => (
+                            <label
+                              key={student.enrollmentId}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '10px',
+                                padding: '8px 10px',
+                                borderRadius: 'var(--radius-sm)',
+                                cursor: 'pointer',
+                                backgroundColor: homeworkDefaulters.has(student.enrollmentId) ? '#FEF2F2' : 'transparent',
+                                border: '1px solid',
+                                borderColor: homeworkDefaulters.has(student.enrollmentId) ? '#FEE2E2' : 'transparent',
+                                transition: 'all 0.1s'
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={homeworkDefaulters.has(student.enrollmentId)}
+                                onChange={() => handleToggleDefaulter(student.enrollmentId)}
+                                style={{ accentColor: '#EF4444', width: '15px', height: '15px' }}
+                              />
+                              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span style={{ fontSize: '13px', fontWeight: homeworkDefaulters.has(student.enrollmentId) ? '600' : '500', color: homeworkDefaulters.has(student.enrollmentId) ? '#DC2626' : 'var(--text-primary)' }}>
+                                  {student.name}
+                                </span>
+                                <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{student.studentCode}</span>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Faculty Notes */}
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <StickyNote size={14} />
+                    Faculty Notes <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '400' }}>(Optional)</span>
+                  </label>
+                  <textarea
+                    className="form-control"
+                    placeholder="e.g. Students need revision in Differentiation"
+                    value={facultyNotes}
+                    onChange={e => setFacultyNotes(e.target.value)}
+                    rows={2}
+                    style={{ resize: 'vertical', minHeight: '60px' }}
+                  />
+                </div>
+              </div>
+
+              {/* ═══ SUBMIT: Complete Class ═══ */}
+              <button 
+                type="submit" 
+                className="btn btn-primary" 
+                style={{ 
+                  width: '100%', 
+                  gap: '8px', 
+                  padding: '14px 24px', 
+                  fontSize: '15px', 
+                  fontWeight: '700',
+                  minHeight: '52px',
+                  background: 'linear-gradient(135deg, var(--primary-orange) 0%, #F97316 100%)',
+                  boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
+                  transition: 'all 0.2s'
+                }} 
+                disabled={submitting || studentList.length === 0}
+              >
+                <CheckCircle size={20} />
+                <span>{submitting ? 'Completing Class...' : 'Complete Class'}</span>
+              </button>
             </>
           )}
         </form>

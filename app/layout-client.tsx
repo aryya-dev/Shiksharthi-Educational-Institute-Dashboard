@@ -146,6 +146,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
     { label: 'Batches', path: '/batches', icon: Layers, roles: ['Director', 'Mentor', 'Admin'] },
     { label: 'Schedule', path: '/schedule', icon: Calendar, roles: ['Director', 'Mentor', 'Admin'] },
     { label: 'Attendance', path: '/attendance', icon: CheckSquare, roles: ['Director', 'Mentor', 'Admin'] },
+    { label: 'Class Reports', path: '/class-reports', icon: FileText, roles: ['Director', 'Mentor', 'Admin'] },
     { label: 'Exams', path: '/exams', icon: FileText, roles: ['Director', 'Mentor', 'Admin'] },
     { label: 'Report Cards', path: '/report-cards', icon: FileText, roles: ['Director', 'Mentor', 'Admin'] },
     { label: 'Syllabus Tracker', path: '/syllabus', icon: BookOpen, roles: ['Director', 'Mentor', 'Admin'] },
@@ -161,13 +162,12 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
     <div className="app-layout">
       {/* Sidebar - Desktop Only */}
       <aside className="sidebar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '32px' }}>
-          <div style={{ width: '32px', height: '32px', borderRadius: '8px', backgroundColor: 'var(--primary-orange)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF', fontWeight: 'bold', fontSize: '18px' }}>
-            S
-          </div>
-          <span style={{ fontSize: '20px', fontWeight: '700', color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-            Shiksharthi <span style={{ color: 'var(--primary-orange)' }}>OS</span>
-          </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '32px', padding: '0 4px' }}>
+          <img 
+            src="/logo.png" 
+            alt="Shiksharthi Logo" 
+            style={{ maxHeight: '45px', maxWidth: '100%', objectFit: 'contain' }} 
+          />
         </div>
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
@@ -218,7 +218,12 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
       <div className="main-content">
         {/* Header */}
         <header className="header-bar">
-          <div className="header-left">
+          <div className="header-left" style={{ display: 'flex', alignItems: 'center' }}>
+            <img 
+              src="/logo.png" 
+              className="mobile-logo" 
+              alt="Shiksharthi Logo" 
+            />
             <div>
               <span className="caption" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>Internal Portal</span>
               <h2 style={{ margin: 0, textTransform: 'capitalize' }}>{pageTitle}</h2>
