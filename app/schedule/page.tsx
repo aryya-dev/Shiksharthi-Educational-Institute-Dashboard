@@ -2,13 +2,13 @@
 
 import React, { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { 
-  Calendar, 
-  Plus, 
-  BookOpen, 
-  MapPin, 
-  User, 
-  X, 
+import {
+  Calendar,
+  Plus,
+  BookOpen,
+  MapPin,
+  User,
+  X,
   AlertTriangle,
   BarChart2,
   List
@@ -59,7 +59,7 @@ export default function SchedulePage() {
   const [extraClasses, setExtraClasses] = useState<ExtraClassRecord[]>([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
-  
+
   // Validation Warnings
   const [validationWarning, setValidationWarning] = useState<string | null>(null);
 
@@ -164,11 +164,11 @@ export default function SchedulePage() {
 
       // Initialize planner classes structure
       setPlannerClasses([
-        { 
-          batchIds: [], 
-          subject: 'Chemistry', 
-          facultyId: mappedFaculty[0]?.id || '', 
-          roomId: mappedRooms[0]?.id || '' 
+        {
+          batchIds: [],
+          subject: 'Chemistry',
+          facultyId: mappedFaculty[0]?.id || '',
+          roomId: mappedRooms[0]?.id || ''
         }
       ]);
     }
@@ -178,16 +178,25 @@ export default function SchedulePage() {
   // Helper: Get dates for the current week
   const getISOStringForDay = (dayOffsetFromMonday: number, timeStr: string) => {
     const today = new Date();
-    const currentDay = today.getDay(); // 0 = Sun, 1 = Mon, etc.
-    const distance = dayOffsetFromMonday - (currentDay === 0 ? 7 : currentDay);
-    const targetDate = new Date(today.setDate(today.getDate() + distance));
-    return `${targetDate.toISOString().split('T')[0]}T${timeStr}:00`;
+
+    const currentDay = today.getDay(); // 0=Sun, 1=Mon...
+    const mondayBasedToday = currentDay === 0 ? 7 : currentDay;
+
+    const targetDate = new Date(today);
+    targetDate.setDate(today.getDate() + (dayOffsetFromMonday - mondayBasedToday));
+
+    // LOCAL date (don't use toISOString)
+    const year = targetDate.getFullYear();
+    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const day = String(targetDate.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}T${timeStr}:00`;
   };
 
   // Load schedule events
   const loadSchedule = async () => {
     if (!currentBranch || !currentAcademicYear) return;
-    
+
     try {
       const { data: scheduleData } = await supabase
         .from('schedules')
@@ -200,7 +209,7 @@ export default function SchedulePage() {
       const regularEvents: CalendarEvent[] = (scheduleData || []).map((s: any) => {
         const startIso = getISOStringForDay(s.day_of_week, s.start_time.slice(0, 5));
         const endIso = getISOStringForDay(s.day_of_week, s.end_time.slice(0, 5));
-        
+
         return {
           id: s.id,
           title: `${s.batches?.name || 'Unknown'} - ${s.subject_name}`,
@@ -228,7 +237,7 @@ export default function SchedulePage() {
       const extraEvents: CalendarEvent[] = (extraSessions || []).map((s: any) => {
         const startIso = `${s.date}T${s.start_time.slice(0, 5)}`;
         const endIso = `${s.date}T${s.end_time.slice(0, 5)}`;
-        
+
         return {
           id: s.id,
           title: `[EXTRA] ${s.batches?.name || 'Unknown'} - ${s.subject_name}`,
@@ -257,7 +266,7 @@ export default function SchedulePage() {
           const formattedHr = hr % 12 || 12;
           return `${formattedHr}:${m} ${ampm}`;
         };
-        
+
         return {
           id: s.id,
           batchName: s.batches?.name || 'Unknown',
@@ -287,7 +296,7 @@ export default function SchedulePage() {
     // Get batch size & room capacity
     const selectedBatch = batches.find(b => b.id === formData.batchId);
     const selectedRoom = rooms.find(r => r.id === roomId);
-    
+
     if (selectedBatch && selectedRoom && selectedBatch.strength > selectedRoom.capacity) {
       setValidationWarning(`⚠️ Capacity Warning: Batch size (${selectedBatch.strength}) exceeds Room ${selectedRoom.name} capacity (${selectedRoom.capacity}).`);
       return;
@@ -360,7 +369,7 @@ export default function SchedulePage() {
 
       // Close and update calendar state
       setShowAddModal(false);
-      
+
       const newEv: CalendarEvent = {
         id: data.id,
         title: `[EXTRA] ${selectedBatch.name} - ${formData.subject}`,
@@ -379,7 +388,7 @@ export default function SchedulePage() {
       };
 
       setEvents([...events, newEv]);
-      
+
       const newReport: ExtraClassRecord = {
         id: data.id,
         batchName: selectedBatch.name,
@@ -512,14 +521,14 @@ export default function SchedulePage() {
       for (let j = 0; j < idx; j++) {
         const other = plannerClasses[j];
         if (other.roomId === c.roomId) {
-          errors.push(`Row ${j+1} & Row ${idx+1} are both booked in Room ${roomName}.`);
+          errors.push(`Row ${j + 1} & Row ${idx + 1} are both booked in Room ${roomName}.`);
         }
         if (other.facultyId === c.facultyId) {
-          errors.push(`Row ${j+1} & Row ${idx+1} are both assigned to Faculty ${facultyName}.`);
+          errors.push(`Row ${j + 1} & Row ${idx + 1} are both assigned to Faculty ${facultyName}.`);
         }
         const sharedBatches = c.batchIds.filter(bId => other.batchIds.includes(bId));
         if (sharedBatches.length > 0) {
-          errors.push(`Row ${j+1} & Row ${idx+1} share batch(es): ${sharedBatches.map(id => batches.find(b => b.id === id)?.name).join(', ')}.`);
+          errors.push(`Row ${j + 1} & Row ${idx + 1} share batch(es): ${sharedBatches.map(id => batches.find(b => b.id === id)?.name).join(', ')}.`);
         }
       }
     });
@@ -569,15 +578,15 @@ export default function SchedulePage() {
 
       // Reset classes form
       setPlannerClasses([
-        { 
-          batchIds: [], 
-          subject: 'Chemistry', 
-          facultyId: facultyList[0]?.id || '', 
-          roomId: rooms[0]?.id || '' 
+        {
+          batchIds: [],
+          subject: 'Chemistry',
+          facultyId: facultyList[0]?.id || '',
+          roomId: rooms[0]?.id || ''
         }
       ]);
       setPlannerErrors([]);
-      
+
       // Refresh list
       await loadSchedule();
       alert('Schedules saved successfully!');
@@ -617,9 +626,9 @@ export default function SchedulePage() {
           classes: []
         };
       }
-      
+
       // Check if this class is already in the list (same room, faculty, subject) for grouping mixed batches
-      const existingClass = timeGroups[timeKey].classes.find((c: any) => 
+      const existingClass = timeGroups[timeKey].classes.find((c: any) =>
         c.roomName === (s.rooms?.name || 'Unknown') &&
         c.facultyName === (s.faculty?.name || 'Unknown') &&
         c.subjectName === s.subject_name
@@ -655,13 +664,13 @@ export default function SchedulePage() {
   return (
 
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      
+
       {/* 1. Dashboard Tabs toolbar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', gap: '4px' }}>
-          <button 
+          <button
             className="btn btn-tertiary"
-            style={{ 
+            style={{
               borderBottom: activeTab === 'calendar' ? '2px solid var(--primary-orange)' : 'none',
               color: activeTab === 'calendar' ? 'var(--primary-orange)' : 'var(--text-secondary)',
               fontWeight: activeTab === 'calendar' ? '600' : '500',
@@ -672,9 +681,9 @@ export default function SchedulePage() {
             <Calendar size={18} />
             <span>Weekly Timetable</span>
           </button>
-          <button 
+          <button
             className="btn btn-tertiary"
-            style={{ 
+            style={{
               borderBottom: activeTab === 'planner' ? '2px solid var(--primary-orange)' : 'none',
               color: activeTab === 'planner' ? 'var(--primary-orange)' : 'var(--text-secondary)',
               fontWeight: activeTab === 'planner' ? '600' : '500',
@@ -685,9 +694,9 @@ export default function SchedulePage() {
             <List size={18} />
             <span>Schedule Planner</span>
           </button>
-          <button 
+          <button
             className="btn btn-tertiary"
-            style={{ 
+            style={{
               borderBottom: activeTab === 'reports' ? '2px solid var(--primary-orange)' : 'none',
               color: activeTab === 'reports' ? 'var(--primary-orange)' : 'var(--text-secondary)',
               fontWeight: activeTab === 'reports' ? '600' : '500',
@@ -702,7 +711,7 @@ export default function SchedulePage() {
 
         {/* Schedule Extra Class Action */}
         {activeTab !== 'planner' && (
-          <button 
+          <button
             className="btn btn-primary"
             style={{ gap: '8px' }}
             onClick={() => {
@@ -720,12 +729,12 @@ export default function SchedulePage() {
 
       {/* 2. Main Tab Area */}
       {activeTab === 'calendar' && (
-        <ScheduleCalendar 
-          events={events} 
+        <ScheduleCalendar
+          events={events}
           onEventClick={(info) => {
             const ev = events.find(e => e.id === info.event.id);
             if (ev) setSelectedEvent(ev);
-          }} 
+          }}
         />
       )}
 
@@ -861,9 +870,9 @@ export default function SchedulePage() {
                 </div>
               )}
 
-              <button 
-                type="submit" 
-                className="btn btn-primary" 
+              <button
+                type="submit"
+                className="btn btn-primary"
                 style={{ width: '100%', gap: '8px' }}
                 disabled={plannerErrors.length > 0}
               >
@@ -1028,8 +1037,8 @@ export default function SchedulePage() {
             width: '100%', maxWidth: '500px', padding: '32px',
             position: 'relative', margin: 0, boxShadow: 'var(--shadow-hover)'
           }}>
-            <button 
-              className="btn btn-tertiary" 
+            <button
+              className="btn btn-tertiary"
               style={{ position: 'absolute', right: '16px', top: '16px', padding: '8px', minHeight: '36px' }}
               onClick={() => {
                 setShowAddModal(false);
@@ -1160,9 +1169,9 @@ export default function SchedulePage() {
                 />
               </div>
 
-              <button 
-                type="submit" 
-                className="btn btn-primary" 
+              <button
+                type="submit"
+                className="btn btn-primary"
                 style={{ width: '100%', marginTop: '8px' }}
                 disabled={!!validationWarning && validationWarning.startsWith('❌')}
               >
@@ -1185,8 +1194,8 @@ export default function SchedulePage() {
             width: '100%', maxWidth: '400px', padding: '32px',
             position: 'relative', margin: 0, boxShadow: 'var(--shadow-hover)'
           }}>
-            <button 
-              className="btn btn-tertiary" 
+            <button
+              className="btn btn-tertiary"
               style={{ position: 'absolute', right: '16px', top: '16px', padding: '8px', minHeight: '36px' }}
               onClick={() => setSelectedEvent(null)}
             >
@@ -1212,7 +1221,7 @@ export default function SchedulePage() {
                 <MapPin size={16} style={{ color: 'var(--text-secondary)' }} />
                 <span>Room: <strong>Room {selectedEvent.extendedProps.room}</strong></span>
               </div>
-              
+
               {selectedEvent.extendedProps.isExtra && (
                 <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '12px', marginTop: '4px' }}>
                   <span className="caption">Reason for Extra Class</span>
