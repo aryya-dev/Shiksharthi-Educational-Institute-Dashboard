@@ -438,6 +438,10 @@ export default function ExamsPage() {
     }
   };
 
+  const todayStr = new Date().toLocaleDateString('en-CA');
+  const upcomingExams = exams.filter(ex => ex.date >= todayStr);
+  const pastExams = exams.filter(ex => ex.date < todayStr);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
@@ -471,14 +475,17 @@ export default function ExamsPage() {
       }}>
 
         {/* Left Column: Exams catalog */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <span className="caption" style={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>Scheduled Tests</span>
-
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          
+          {/* Scheduled Exams Section */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {exams.length === 0 ? (
-              <p className="secondary-text">No exams scheduled.</p>
+            <span className="caption" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '700', color: 'var(--text-secondary)' }}>
+              Scheduled Exams
+            </span>
+            {upcomingExams.length === 0 ? (
+              <p className="secondary-text" style={{ fontSize: '13px', fontStyle: 'italic', paddingLeft: '4px' }}>No upcoming exams scheduled.</p>
             ) : (
-              exams.map((ex) => (
+              upcomingExams.map((ex) => (
                 <div
                   key={ex.id}
                   className="card"
@@ -513,6 +520,52 @@ export default function ExamsPage() {
               ))
             )}
           </div>
+
+          {/* Past Exams Section */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <span className="caption" style={{ textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '700', color: 'var(--text-secondary)' }}>
+              Past Exams
+            </span>
+            {pastExams.length === 0 ? (
+              <p className="secondary-text" style={{ fontSize: '13px', fontStyle: 'italic', paddingLeft: '4px' }}>No past exams.</p>
+            ) : (
+              pastExams.map((ex) => (
+                <div
+                  key={ex.id}
+                  className="card"
+                  style={{
+                    margin: 0,
+                    padding: '16px 20px',
+                    cursor: 'pointer',
+                    borderColor: selectedExam?.id === ex.id ? 'var(--primary-orange)' : 'var(--border-color)',
+                    backgroundColor: selectedExam?.id === ex.id ? 'var(--surface-secondary)' : 'var(--surface-card)',
+                    borderLeft: selectedExam?.id === ex.id ? '4px solid var(--primary-orange)' : '1px solid var(--border-color)',
+                    opacity: 0.85
+                  }}
+                  onClick={() => {
+                    setSelectedExam(ex);
+                    setIsEditingMarks(false);
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                    <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{ex.name}</span>
+                    <span className="badge badge-secondary" style={{ fontSize: '11px', flexShrink: 0 }}>{ex.type}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '16px', marginTop: '8px' }} className="caption">
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Layers size={13} />
+                      {ex.batchName}
+                    </span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Calendar size={13} />
+                      {ex.date}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
         </div>
 
         {/* Right Column: Student Marks Spreadsheet */}

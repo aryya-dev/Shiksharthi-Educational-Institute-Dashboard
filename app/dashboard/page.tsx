@@ -28,6 +28,7 @@ interface ClassItem {
   id: string;
   time: string;
   batch: string;
+  class: string;
   subject: string;
   faculty: string;
   room: string;
@@ -90,16 +91,17 @@ export default function DashboardPage() {
           setSelectedBatchId('');
         }
 
-        const todayStr = new Date().toISOString().split('T')[0];
-        const { data: sessions } = await supabase
-          .from('class_sessions')
-          .select('*, batches(name, branch_id), rooms(name), faculty(name)')
-          .eq('date', todayStr);
+        const jsDay = new Date().getDay();
+        const dbDay = jsDay === 0 ? 7 : jsDay;
 
-        // Map branch sessions
-        const branchSessions = (sessions || []).filter((s: any) => s.batches?.branch_id === currentBranch.id);
+        const { data: todaySchedules } = await supabase
+          .from('schedules')
+          .select('*, batches(name, class, branch_id), rooms(name), faculty(name)')
+          .eq('day_of_week', dbDay)
+          .eq('branch_id', currentBranch.id)
+          .eq('academic_year_id', currentAcademicYear.id);
 
-        const activeClasses: ClassItem[] = branchSessions.map((s: any) => {
+        const mappedClasses: ClassItem[] = (todaySchedules || []).map((s: any) => {
           const formatTime = (t: string) => {
             if (!t) return '';
             const [h, m] = t.split(':');
@@ -112,6 +114,7 @@ export default function DashboardPage() {
           
           let status: 'Upcoming' | 'Ongoing' | 'Completed' | 'Cancelled' = 'Upcoming';
           const now = new Date();
+          const todayStr = new Date().toLocaleDateString('en-CA');
           const startStr = `${todayStr}T${s.start_time}`;
           const endStr = `${todayStr}T${s.end_time}`;
           const startTime = new Date(startStr);
@@ -126,6 +129,7 @@ export default function DashboardPage() {
             id: s.id,
             time: timeRange,
             batch: s.batches?.name || 'Unknown',
+            class: s.batches?.class || 'Unknown',
             subject: s.subject_name,
             faculty: s.faculty?.name || 'TBD',
             room: s.rooms?.name || 'TBD',
@@ -133,6 +137,15 @@ export default function DashboardPage() {
             strength: 0
           };
         });
+
+        // Sort classes chronologically by start_time
+        mappedClasses.sort((a, b) => {
+          const s1 = (todaySchedules || []).find((s: any) => s.id === a.id);
+          const s2 = (todaySchedules || []).find((s: any) => s.id === b.id);
+          return (s1?.start_time || '').localeCompare(s2?.start_time || '');
+        });
+
+        const activeClasses = mappedClasses;
 
         // Query outstanding dues
         let feesDueStr = '₹0';
@@ -187,7 +200,134 @@ export default function DashboardPage() {
           .gte('date', todayDateStr);
 
         setClasses(activeClasses);
-        setAlerts([]); // Alerts are empty as there is no alerts table or active alerts seeded in db
+
+        // ── Generate real-time alerts ──────────────────────────────
+        const computedAlerts: AlertItem[] = [];
+
+        // 1) Fetch attendance for consecutive-absence detection
+        const { data: attData } = await supabase
+          .from('attendance')
+          .select(`
+            status,
+            enrollment_id,
+            enrollments!inner(
+              id,
+              branch_id,
+              academic_year_id,
+              students(name, student_code),
+              batches(name)
+            ),
+            class_sessions!inner(
+              subject_name,
+              date
+            )
+          `)
+          .eq('enrollments.branch_id', currentBranch.id)
+          .eq('enrollments.academic_year_id', currentAcademicYear.id);
+
+        // Group by enrollment → subject, sort by date, find consecutive absences
+        const attGrouped: Record<string, {
+          name: string; code: string; batch: string;
+          subjects: Record<string, { status: string; date: string }[]>;
+        }> = {};
+
+        (attData || []).forEach((rec: any) => {
+          const eId = rec.enrollment_id;
+          if (!attGrouped[eId]) {
+            attGrouped[eId] = {
+              name: rec.enrollments.students?.name || '',
+              code: rec.enrollments.students?.student_code || '',
+              batch: rec.enrollments.batches?.name || '',
+              subjects: {}
+            };
+          }
+          const subj = rec.class_sessions.subject_name;
+          if (!attGrouped[eId].subjects[subj]) attGrouped[eId].subjects[subj] = [];
+          attGrouped[eId].subjects[subj].push({
+            status: rec.status,
+            date: rec.class_sessions.date
+          });
+        });
+
+        Object.values(attGrouped).forEach(student => {
+          Object.entries(student.subjects).forEach(([subj, records]) => {
+            records.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            for (let i = 0; i < records.length - 1; i++) {
+              if (records[i].status === 'Absent' && records[i + 1].status === 'Absent') {
+                computedAlerts.push({
+                  type: 'danger',
+                  title: `Consecutive Absences — ${student.name}`,
+                  description: `${student.name} (${student.code}) was absent back-to-back in ${subj} (${student.batch}) on ${records[i].date} and ${records[i + 1].date}.`
+                });
+                break; // one alert per student-subject
+              }
+            }
+          });
+        });
+
+        // 2) Fetch exam results for consecutive-low-score detection
+        const { data: resData } = await supabase
+          .from('results')
+          .select(`
+            marks_obtained,
+            percentage,
+            enrollment_id,
+            enrollments!inner(
+              id,
+              branch_id,
+              academic_year_id,
+              students(name, student_code),
+              batches(name)
+            ),
+            exams!inner(
+              name,
+              date,
+              max_marks
+            )
+          `)
+          .eq('enrollments.branch_id', currentBranch.id)
+          .eq('enrollments.academic_year_id', currentAcademicYear.id);
+
+        const resGrouped: Record<string, {
+          name: string; code: string; batch: string;
+          scores: { examName: string; date: string; percentage: number; marks: number }[];
+        }> = {};
+
+        (resData || []).forEach((rec: any) => {
+          const eId = rec.enrollment_id;
+          if (!resGrouped[eId]) {
+            resGrouped[eId] = {
+              name: rec.enrollments.students?.name || '',
+              code: rec.enrollments.students?.student_code || '',
+              batch: rec.enrollments.batches?.name || '',
+              scores: []
+            };
+          }
+          resGrouped[eId].scores.push({
+            examName: rec.exams.name,
+            date: rec.exams.date,
+            percentage: parseFloat(rec.percentage),
+            marks: parseFloat(rec.marks_obtained)
+          });
+        });
+
+        Object.values(resGrouped).forEach(student => {
+          student.scores.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+          for (let i = 0; i < student.scores.length - 1; i++) {
+            const s1 = student.scores[i];
+            const s2 = student.scores[i + 1];
+            if (s1.marks >= 0 && s1.percentage < 25 && s2.marks >= 0 && s2.percentage < 25) {
+              computedAlerts.push({
+                type: 'warning',
+                title: `Consecutive Low Scores — ${student.name}`,
+                description: `${student.name} (${student.code}) scored below 25% consecutively in "${s1.examName}" (${s1.percentage}%) and "${s2.examName}" (${s2.percentage}%) in ${student.batch}.`
+              });
+              break; // one alert per student
+            }
+          }
+        });
+
+        setAlerts(computedAlerts);
         setStats({
           totalStudents: studentCount || 0,
           classesToday: activeClasses.length,
@@ -332,47 +472,91 @@ export default function DashboardPage() {
                 <p className="secondary-text">No classes scheduled for today.</p>
               </div>
             ) : (
-              classes.map((cls) => (
-                <div key={cls.id} className="card class-card" style={{ 
-                  borderLeft: cls.status === 'Ongoing' ? '4px solid var(--primary-orange)' : undefined
-                }}>
-                  <div className="class-card-info">
-                    <div className="class-card-title">
-                      <span style={{ fontSize: '16px', fontWeight: '600', color: 'var(--text-primary)' }}>
-                        {cls.batch} — {cls.subject}
-                      </span>
-                      <span className={`badge ${
-                        cls.status === 'Completed' ? 'badge-success' : 
-                        cls.status === 'Ongoing' ? 'badge-warning' : 
-                        cls.status === 'Cancelled' ? 'badge-error' : 'badge-info'
-                      }`}>
-                        {cls.status}
-                      </span>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                position: 'relative',
+                paddingLeft: '24px',
+                borderLeft: '2px solid var(--border-color)',
+                gap: '24px',
+                marginTop: '8px'
+              }}>
+                {classes.map((cls) => {
+                  const dotColor = 
+                    cls.status === 'Completed' ? 'var(--color-success)' :
+                    cls.status === 'Ongoing' ? 'var(--primary-orange)' :
+                    '#3B82F6'; // Upcoming (blue)
+                  
+                  return (
+                    <div key={cls.id} style={{ position: 'relative' }}>
+                      {/* Timeline Node Point */}
+                      <div style={{
+                        position: 'absolute',
+                        left: '-31px',
+                        top: '4px',
+                        width: '12px',
+                        height: '12px',
+                        borderRadius: '50%',
+                        backgroundColor: 'var(--surface-card)',
+                        border: `3px solid ${dotColor}`,
+                        boxShadow: cls.status === 'Ongoing' ? '0 0 0 4px rgba(249, 115, 22, 0.2)' : 'none',
+                        zIndex: 1
+                      }} />
+                      
+                      <div className="card" style={{
+                        margin: 0,
+                        padding: '16px 20px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '8px',
+                        backgroundColor: cls.status === 'Ongoing' ? 'var(--surface-secondary)' : 'var(--surface-card)',
+                        borderColor: cls.status === 'Ongoing' ? 'var(--primary-orange)' : 'var(--border-color)'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span className="caption" style={{ 
+                            fontWeight: '600', 
+                            color: 'var(--text-secondary)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}>
+                            <Clock size={14} />
+                            {cls.time}
+                          </span>
+                          <span className={`badge ${
+                            cls.status === 'Completed' ? 'badge-success' : 
+                            cls.status === 'Ongoing' ? 'badge-warning' : 
+                            'badge-info'
+                          }`}>
+                            {cls.status}
+                          </span>
+                        </div>
+                        
+                        <div style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                          {cls.class} — {cls.batch}
+                        </div>
+                        
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '500' }}>
+                            <BookOpen size={15} style={{ color: 'var(--primary-orange)' }} />
+                            <span>{cls.subject}</span>
+                          </div>
+                          
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }} className="secondary-text">
+                            <User size={15} />
+                            <span>{cls.faculty}</span>
+                          </div>
+                          
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }} className="secondary-text">
+                            <MapPin size={15} />
+                            <span>Room {cls.room}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-
-                    <div className="class-card-meta caption">
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Clock size={16} />
-                        {cls.time}
-                      </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <User size={16} />
-                        {cls.faculty}
-                      </span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <MapPin size={16} />
-                        Room {cls.room}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <button className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px' }}>
-                      Details
-                    </button>
-                  </div>
-                </div>
-              ))
+                  );
+                })}
+              </div>
             )}
           </div>
         </section>
