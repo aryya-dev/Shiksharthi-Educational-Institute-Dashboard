@@ -50,6 +50,7 @@ interface StudentListItem {
   name: string;
   parent_name: string;
   class: string;
+  board?: string;
   batch_id: string;
   batch_name: string;
   package_type: string;
@@ -119,11 +120,11 @@ const academicPdfStyles = StyleSheet.create({
 
 // PDF Document Component for Academic History
 const AcademicHistoryPDF = ({
-  studentName, studentCode, batchName, className, school,
+  studentName, studentCode, batchName, className, board, school,
   subjectAttendance, overallAttendance,
   examScores
 }: {
-  studentName: string; studentCode: string; batchName: string; className: string; school: string;
+  studentName: string; studentCode: string; batchName: string; className: string; board: string; school: string;
   subjectAttendance: SubjectAttendance[]; overallAttendance: number | null;
   examScores: any[];
 }) => {
@@ -151,6 +152,12 @@ const AcademicHistoryPDF = ({
             <View style={academicPdfStyles.row}>
               <Text style={academicPdfStyles.label}>School</Text>
               <Text style={academicPdfStyles.value}>{school}</Text>
+            </View>
+          ) : null}
+          {board ? (
+            <View style={academicPdfStyles.row}>
+              <Text style={academicPdfStyles.label}>Board</Text>
+              <Text style={academicPdfStyles.value}>{board}</Text>
             </View>
           ) : null}
           <View style={academicPdfStyles.row}>
@@ -328,6 +335,7 @@ export default function StudentsPage() {
     school: '',
     address: '',
     classVal: '11',
+    board: '',
     batchId: '',
     packageType: 'JEE',
     addOns: [] as string[],
@@ -431,6 +439,7 @@ export default function StudentsPage() {
           .select(`
             id,
             class,
+            board,
             batch_id,
             package_type,
             status,
@@ -466,6 +475,7 @@ export default function StudentsPage() {
           name: item.students?.name || '',
           parent_name: item.students?.parent_name || '',
           class: item.class,
+          board: item.board || '',
           batch_id: item.batch_id || item.batches?.id || '',
           batch_name: item.batches?.name || 'Unassigned',
           package_type: item.package_type || 'Boards',
@@ -495,6 +505,25 @@ export default function StudentsPage() {
   const handleAdmission = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentBranch || !currentAcademicYear) return;
+
+    // Validate Board
+    const classVal = newStudent.classVal;
+    const board = newStudent.board;
+    if (['7', '8', '9', '10'].includes(classVal)) {
+      if (!board) {
+        alert('Board is required for Class 7-10.');
+        return;
+      }
+      if (!['ICSE', 'CBSE'].includes(board)) {
+        alert('Board must be "ICSE" or "CBSE" for Class 7-10.');
+        return;
+      }
+    } else if (['11', '12'].includes(classVal)) {
+      if (board && !['ISC', 'CBSE'].includes(board)) {
+        alert('Board must be "ISC" or "CBSE" for Class 11-12.');
+        return;
+      }
+    }
 
     try {
       // 1. Fetch exact enrollment count to generate unique sequential code e.g. SHK-BGP-0001
@@ -534,6 +563,7 @@ export default function StudentsPage() {
           academic_year_id: currentAcademicYear.id,
           branch_id: currentBranch.id,
           class: newStudent.classVal,
+          board: newStudent.board || null,
           batch_id: selectedBatchId,
           package_type: newStudent.packageType,
           subjects_taken: newStudent.subjects,
@@ -555,6 +585,7 @@ export default function StudentsPage() {
         name: newStudent.name,
         parent_name: newStudent.parentName,
         class: newStudent.classVal,
+        board: enrollment.board || '',
         batch_id: newStudent.batchId || '',
         batch_name: availableBatches.find(b => b.id === newStudent.batchId)?.name || 'Unassigned',
         package_type: newStudent.packageType,
@@ -575,6 +606,7 @@ export default function StudentsPage() {
         school: '',
         address: '',
         classVal: '11',
+        board: '',
         batchId: '',
         packageType: 'JEE',
         addOns: [],
@@ -592,6 +624,7 @@ export default function StudentsPage() {
         name: newStudent.name,
         parent_name: newStudent.parentName,
         class: newStudent.classVal,
+        board: newStudent.board || '',
         batch_id: '',
         batch_name: 'Pending Assignment',
         package_type: newStudent.packageType,
@@ -746,6 +779,7 @@ export default function StudentsPage() {
         const name = (row['Name'] || row['name'] || '').toString().trim();
         const school = (row['School Name'] || row['school_name'] || row['School'] || row['school'] || '').toString().trim();
         const classVal = (row['Class'] || row['class'] || '').toString().trim();
+        const board = (row['Board'] || row['board'] || '').toString().trim().toUpperCase();
         const batchName = (row['Batch'] || row['batch'] || row['Batch Name'] || row['batch_name'] || '').toString().trim();
         const subjectsRaw = (row['Subject'] || row['subject'] || row['Subjects'] || row['subjects'] || '').toString().trim();
         const statusRaw = (row['Status'] || row['status'] || '').toString().trim();
@@ -759,34 +793,48 @@ export default function StudentsPage() {
 
         // 1. Validate required Name
         if (!name) {
-          return { rowNum, isValid: false, errorReason: 'Missing Name', name, school, classVal, batchName, subjectsRaw, statusRaw };
+          return { rowNum, isValid: false, errorReason: 'Missing Name', name, school, classVal, board, batchName, subjectsRaw, statusRaw };
         }
 
         // 2. Validate Class
-        if (!classVal || !['11', '12'].includes(classVal)) {
-          return { rowNum, isValid: false, errorReason: `Class must be 11 or 12 (got "${classVal}")`, name, school, classVal, batchName, subjectsRaw, statusRaw };
+        if (!classVal || !['7', '8', '9', '10', '11', '12'].includes(classVal)) {
+          return { rowNum, isValid: false, errorReason: `Class must be between 7 and 12 (got "${classVal}")`, name, school, classVal, board, batchName, subjectsRaw, statusRaw };
         }
 
-        // 3. Resolve Batch Name
+        // 3. Validate Board based on class
+        if (['7', '8', '9', '10'].includes(classVal)) {
+          if (!board) {
+            return { rowNum, isValid: false, errorReason: 'Missing Board (Mandatory for Class 7-10)', name, school, classVal, board, batchName, subjectsRaw, statusRaw };
+          }
+          if (!['ICSE', 'CBSE'].includes(board)) {
+            return { rowNum, isValid: false, errorReason: `Board must be "ICSE" or "CBSE" for Class 7-10 (got "${board}")`, name, school, classVal, board, batchName, subjectsRaw, statusRaw };
+          }
+        } else if (['11', '12'].includes(classVal)) {
+          if (board && !['ISC', 'CBSE'].includes(board)) {
+            return { rowNum, isValid: false, errorReason: `Board must be "ISC" or "CBSE" for Class 11-12 (got "${board}")`, name, school, classVal, board, batchName, subjectsRaw, statusRaw };
+          }
+        }
+
+        // 4. Resolve Batch Name
         if (!batchName) {
-          return { rowNum, isValid: false, errorReason: 'Missing Batch Name', name, school, classVal, batchName, subjectsRaw, statusRaw };
+          return { rowNum, isValid: false, errorReason: 'Missing Batch Name', name, school, classVal, board, batchName, subjectsRaw, statusRaw };
         }
         const matchedBatch = batchMap.get(batchName.toLowerCase().trim());
         if (!matchedBatch) {
-          return { rowNum, isValid: false, errorReason: `Batch "${batchName}" not found in branch`, name, school, classVal, batchName, subjectsRaw, statusRaw };
+          return { rowNum, isValid: false, errorReason: `Batch "${batchName}" not found in branch`, name, school, classVal, board, batchName, subjectsRaw, statusRaw };
         }
 
         // Validate batch class matches student class
         if (matchedBatch.class !== classVal) {
-          return { rowNum, isValid: false, errorReason: `Batch class (${matchedBatch.class}) mismatch with student class (${classVal})`, name, school, classVal, batchName, subjectsRaw, statusRaw };
+          return { rowNum, isValid: false, errorReason: `Batch class (${matchedBatch.class}) mismatch with student class (${classVal})`, name, school, classVal, board, batchName, subjectsRaw, statusRaw };
         }
 
-        // 4. Resolve Subjects & Package
+        // 5. Resolve Subjects & Package
         const explicitPackage = (row['Package Type'] || row['package_type'] || '').toString().trim();
         const resolvedPackageType = explicitPackage || getPackageTypeFromBatchName(matchedBatch.name, 'Boards');
         const resolvedSubjects = parseSubjects(subjectsRaw, resolvedPackageType);
 
-        // 5. Parse DOB
+        // 6. Parse DOB
         let dob: string | null = null;
         if (dobRaw) {
           if (typeof dobRaw === 'number') {
@@ -802,7 +850,7 @@ export default function StudentsPage() {
           }
         }
 
-        // 6. Map Status
+        // 7. Map Status
         let resolvedStatus: 'Active' | 'Dropped Out' = 'Active';
         if (statusRaw.toLowerCase().includes('discontinue') || statusRaw.toLowerCase().includes('inactive')) {
           resolvedStatus = 'Dropped Out';
@@ -818,6 +866,7 @@ export default function StudentsPage() {
           school: school || '',
           address: address || '',
           classVal,
+          board: board || '',
           batchName: matchedBatch.name,
           resolvedBatchId: matchedBatch.id,
           resolvedPackageType,
@@ -893,6 +942,7 @@ export default function StudentsPage() {
             academic_year_id: currentAcademicYear.id,
             branch_id: currentBranch.id,
             class: row.classVal,
+            board: row.board || null,
             batch_id: row.resolvedBatchId,
             package_type: row.resolvedPackageType,
             subjects_taken: row.resolvedSubjects,
@@ -916,6 +966,7 @@ export default function StudentsPage() {
           name: row.name,
           parent_name: row.parentName,
           class: row.classVal,
+          board: enrollData.board || '',
           batch_id: row.resolvedBatchId || '',
           batch_name: row.batchName,
           package_type: row.resolvedPackageType,
@@ -958,6 +1009,7 @@ export default function StudentsPage() {
         'School': st.school || '',
         'Address': st.address || '',
         'Class': st.class,
+        'Board': st.board || '',
         'Batch': st.batch_name,
         'Package': st.package_type,
         'Subjects': (st.subjects_taken || []).join(', '),
@@ -987,6 +1039,7 @@ export default function StudentsPage() {
           'School': 'DPS Bokaro',
           'Address': 'Sector 4, Bokaro',
           'Class': '11',
+          'Board': 'ISC',
           'Batch Name': '11th JEE Batch A',
           'Package Type': 'JEE',
           'Subjects': 'Physics, Chemistry, Mathematics'
@@ -995,7 +1048,7 @@ export default function StudentsPage() {
       const ws = XLSX.utils.json_to_sheet(templateData);
       ws['!cols'] = [
         { wch: 20 }, { wch: 20 }, { wch: 14 }, { wch: 8 },
-        { wch: 18 }, { wch: 24 }, { wch: 6 }, { wch: 22 },
+        { wch: 18 }, { wch: 24 }, { wch: 6 }, { wch: 10 }, { wch: 22 },
         { wch: 14 }, { wch: 40 }
       ];
       const wb = XLSX.utils.book_new();
@@ -1228,6 +1281,7 @@ export default function StudentsPage() {
                     <th>Name</th>
                     <th>Parent Name</th>
                     <th>Class</th>
+                    <th>Board</th>
                     <th>Batch</th>
                     <th>Package</th>
                     <th>Status</th>
@@ -1241,6 +1295,7 @@ export default function StudentsPage() {
                       <td style={{ fontWeight: '500' }}>{st.name}</td>
                       <td className="secondary-text">{st.parent_name}</td>
                       <td>Class {st.class}</td>
+                      <td>{st.board || '—'}</td>
                       <td>{st.batch_name}</td>
                       <td>
                         <span className="badge badge-info">{st.package_type}</span>
@@ -1295,6 +1350,10 @@ export default function StudentsPage() {
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span>Class & Batch:</span>
                       <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>Class {st.class} ({st.batch_name})</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Board:</span>
+                      <span style={{ color: 'var(--text-primary)', fontWeight: '500' }}>{st.board || '—'}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span>Package:</span>
@@ -1423,7 +1482,14 @@ export default function StudentsPage() {
                       <select
                         className="form-control"
                         value={newStudent.classVal}
-                        onChange={(e) => setNewStudent({ ...newStudent, classVal: e.target.value })}
+                        onChange={(e) => {
+                          const newClass = e.target.value;
+                          setNewStudent(prev => ({
+                            ...prev,
+                            classVal: newClass,
+                            board: '' // reset board to avoid invalid board values for class
+                          }));
+                        }}
                       >
                         <option value="11">Class 11</option>
                         <option value="12">Class 12</option>
@@ -1433,6 +1499,35 @@ export default function StudentsPage() {
                         <option value="10">Class 10</option>
                       </select>
                     </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label">
+                        Board {['7', '8', '9', '10'].includes(newStudent.classVal) ? '*' : ''}
+                      </label>
+                      {['7', '8', '9', '10'].includes(newStudent.classVal) ? (
+                        <select
+                          className="form-control"
+                          required
+                          value={newStudent.board}
+                          onChange={(e) => setNewStudent({ ...newStudent, board: e.target.value })}
+                        >
+                          <option value="">Select Board *</option>
+                          <option value="ICSE">ICSE</option>
+                          <option value="CBSE">CBSE</option>
+                        </select>
+                      ) : (
+                        <select
+                          className="form-control"
+                          value={newStudent.board}
+                          onChange={(e) => setNewStudent({ ...newStudent, board: e.target.value })}
+                        >
+                          <option value="">None / Not Specified</option>
+                          <option value="ISC">ISC</option>
+                          <option value="CBSE">CBSE</option>
+                        </select>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid-form-2col" style={{ marginTop: '16px' }}>
                     <div className="form-group" style={{ margin: 0 }}>
                       <label className="form-label">Batch *</label>
                       <select
@@ -1450,8 +1545,6 @@ export default function StudentsPage() {
                         )}
                       </select>
                     </div>
-                  </div>
-                  <div className="grid-form-2col">
                     <div className="form-group" style={{ margin: 0 }}>
                       <label className="form-label">Package Option</label>
                       <select
@@ -1646,6 +1739,7 @@ export default function StudentsPage() {
                     <th style={{ padding: '10px 12px', fontSize: '12px' }}>Name</th>
                     <th style={{ padding: '10px 12px', fontSize: '12px' }}>Parent Name</th>
                     <th style={{ padding: '10px 12px', fontSize: '12px', width: '70px' }}>Class</th>
+                    <th style={{ padding: '10px 12px', fontSize: '12px', width: '70px' }}>Board</th>
                     <th style={{ padding: '10px 12px', fontSize: '12px' }}>Batch</th>
                     <th style={{ padding: '10px 12px', fontSize: '12px' }}>Package</th>
                     <th style={{ padding: '10px 12px', fontSize: '12px' }}>Subjects</th>
@@ -1662,6 +1756,7 @@ export default function StudentsPage() {
                       <td style={{ padding: '10px 12px', fontSize: '12px', color: row.isValid ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{row.name || '—'}</td>
                       <td style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--text-secondary)' }}>{row.parentName || '—'}</td>
                       <td style={{ padding: '10px 12px', fontSize: '12px' }}>{row.classVal ? `Class ${row.classVal}` : '—'}</td>
+                      <td style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--text-secondary)' }}>{row.board || '—'}</td>
                       <td style={{ padding: '10px 12px', fontSize: '12px', color: 'var(--text-secondary)' }}>{row.batchName || '—'}</td>
                       <td style={{ padding: '10px 12px', fontSize: '12px' }}>
                         {row.resolvedPackageType ? (
@@ -1843,7 +1938,8 @@ export default function StudentsPage() {
       school: student.school || '',
       address: student.address || '',
       subjects: student.subjects_taken || [],
-      batchId: student.batch_id || ''
+      batchId: student.batch_id || '',
+      board: student.board || ''
     });
     const [savingEdit, setSavingEdit] = useState(false);
     const [availableBatches, setAvailableBatches] = useState<{ id: string; name: string }[]>([]);
@@ -1858,7 +1954,8 @@ export default function StudentsPage() {
         school: student.school || '',
         address: student.address || '',
         subjects: student.subjects_taken || [],
-        batchId: student.batch_id || ''
+        batchId: student.batch_id || '',
+        board: student.board || ''
       });
     }, [student]);
 
@@ -1895,6 +1992,26 @@ export default function StudentsPage() {
 
     const handleSaveEdit = async (e: React.FormEvent) => {
       e.preventDefault();
+
+      // Validate Board
+      const classVal = student.class;
+      const board = editState.board;
+      if (['7', '8', '9', '10'].includes(classVal)) {
+        if (!board) {
+          alert('Board is required for Class 7-10.');
+          return;
+        }
+        if (!['ICSE', 'CBSE'].includes(board)) {
+          alert('Board must be "ICSE" or "CBSE" for Class 7-10.');
+          return;
+        }
+      } else if (['11', '12'].includes(classVal)) {
+        if (board && !['ISC', 'CBSE'].includes(board)) {
+          alert('Board must be "ISC" or "CBSE" for Class 11-12.');
+          return;
+        }
+      }
+
       setSavingEdit(true);
       try {
         const finalName = toTitleCase(editState.name);
@@ -1921,13 +2038,14 @@ export default function StudentsPage() {
           ? getPackageTypeFromBatchName(selectedBatch.name, student.package_type || 'Boards')
           : (student.package_type || 'Boards');
 
-        // Update enrollment table for subjects, batch, and package
+        // Update enrollment table for subjects, batch, package, and board
         const { error: eErr } = await supabase
           .from('enrollments')
           .update({
             batch_id: editState.batchId,
             package_type: newPackage,
-            subjects_taken: editState.subjects
+            subjects_taken: editState.subjects,
+            board: editState.board || null
           })
           .eq('id', student.id);
 
@@ -1944,7 +2062,8 @@ export default function StudentsPage() {
           subjects_taken: editState.subjects,
           batch_id: editState.batchId,
           batch_name: newBatchName,
-          package_type: newPackage
+          package_type: newPackage,
+          board: editState.board || ''
         });
 
         setIsEditing(false);
@@ -2440,6 +2559,40 @@ export default function StudentsPage() {
                   </div>
                 </div>
 
+                <div className="grid-form-2col" style={{ gap: '16px', marginTop: '16px' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label">
+                      Board {['7', '8', '9', '10'].includes(student.class) ? '*' : ''}
+                    </label>
+                    {['7', '8', '9', '10'].includes(student.class) ? (
+                      <select
+                        className="form-control"
+                        required
+                        value={editState.board}
+                        onChange={(e) => setEditState({ ...editState, board: e.target.value })}
+                      >
+                        <option value="">Select Board *</option>
+                        <option value="ICSE">ICSE</option>
+                        <option value="CBSE">CBSE</option>
+                      </select>
+                    ) : (
+                      <select
+                        className="form-control"
+                        value={editState.board}
+                        onChange={(e) => setEditState({ ...editState, board: e.target.value })}
+                      >
+                        <option value="">None / Not Specified</option>
+                        <option value="ISC">ISC</option>
+                        <option value="CBSE">CBSE</option>
+                      </select>
+                    )}
+                  </div>
+                  <div className="form-group" style={{ margin: 0, visibility: 'hidden' }}>
+                    <label className="form-label">Placeholder</label>
+                    <input type="text" className="form-control" />
+                  </div>
+                </div>
+
                 <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label">Address</label>
                   <textarea
@@ -2593,10 +2746,14 @@ export default function StudentsPage() {
                   </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px' }}>
                   <div>
                     <span className="caption">School Name</span>
                     <p style={{ fontWeight: '500', marginTop: '4px' }}>{student.school || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="caption">Board</span>
+                    <p style={{ fontWeight: '500', marginTop: '4px' }}>{student.board || '—'}</p>
                   </div>
                   <div>
                     <span className="caption">Date of Birth / Age</span>
@@ -2785,6 +2942,7 @@ export default function StudentsPage() {
                           studentCode={student.student_code}
                           batchName={student.batch_name}
                           className={student.class}
+                          board={student.board || ''}
                           school={student.school || ''}
                           subjectAttendance={subjectAttendance}
                           overallAttendance={overallAttendance}
