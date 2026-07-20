@@ -32,7 +32,7 @@ import {
   ResponsiveContainer,
   CartesianGrid
 } from 'recharts';
-import { Document, Page as PdfPage, Text, View, StyleSheet, PDFDownloadLink } from '@react-pdf/renderer';
+import { Document, Page as PdfPage, Text, View, StyleSheet, PDFDownloadLink, Image } from '@react-pdf/renderer';
 import { useAppStore } from '@/store/useAppStore';
 import { createClient } from '@/utils/supabase/client';
 const getPackageTypeFromBatchName = (batchName: string, fallback: string) => {
@@ -95,9 +95,11 @@ const toTitleCase = (str: string) => {
 // PDF Styling for Academic History Report
 const academicPdfStyles = StyleSheet.create({
   page: { padding: 40, fontFamily: 'Helvetica', fontSize: 10, backgroundColor: '#FFFFFF' },
-  header: { marginBottom: 24, borderBottomWidth: 2, borderBottomColor: '#F59E0B', paddingBottom: 12 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#111827', letterSpacing: -0.5 },
-  subtitle: { fontSize: 11, color: '#6B7280', marginTop: 4, textTransform: 'uppercase', letterSpacing: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20, borderBottomWidth: 2, borderBottomColor: '#F59E0B', paddingBottom: 10, gap: 10 },
+  logo: { width: 80, height: 28, objectFit: 'contain' },
+  headerTextWrap: { flex: 1 },
+  title: { fontSize: 18, fontWeight: 'bold', color: '#111827', letterSpacing: -0.3 },
+  subtitle: { fontSize: 9, color: '#6B7280', marginTop: 2, textTransform: 'uppercase', letterSpacing: 1 },
   section: { marginBottom: 20 },
   sectionTitle: { fontSize: 12, fontWeight: 'bold', color: '#111827', borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingBottom: 6, marginBottom: 10 },
   row: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#F3F4F6', padding: 6, alignItems: 'center' },
@@ -110,12 +112,7 @@ const academicPdfStyles = StyleSheet.create({
   cellMarks: { width: 90, fontSize: 10, textAlign: 'center', fontWeight: 'bold' },
   overallRow: { flexDirection: 'row', padding: 8, backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A', borderRadius: 4, marginTop: 8 },
   footer: { position: 'absolute', bottom: 40, left: 40, right: 40, borderTopWidth: 1, borderTopColor: '#E5E7EB', paddingTop: 12, textAlign: 'center' },
-  footerText: { fontSize: 8, color: '#9CA3AF' },
-  // Bar chart styles
-  barRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 0 },
-  barLabel: { width: 80, fontSize: 10, color: '#374151', textAlign: 'right', paddingRight: 8 },
-  barTrack: { flex: 1, height: 14, backgroundColor: '#F3F4F6', borderRadius: 3, overflow: 'hidden', position: 'relative' },
-  barPctLabel: { width: 50, fontSize: 10, fontWeight: 'bold', textAlign: 'left', paddingLeft: 8 }
+  footerText: { fontSize: 8, color: '#9CA3AF' }
 });
 
 // PDF Document Component for Academic History
@@ -133,8 +130,11 @@ const AcademicHistoryPDF = ({
     <Document>
       <PdfPage size="A4" style={academicPdfStyles.page}>
         <View style={academicPdfStyles.header}>
-          <Text style={academicPdfStyles.title}>SHIKSHARTHI COACHING INSTITUTE</Text>
-          <Text style={academicPdfStyles.subtitle}>Academic History Report</Text>
+          <Image src="/logo.png" style={academicPdfStyles.logo} />
+          <View style={academicPdfStyles.headerTextWrap}>
+            <Text style={academicPdfStyles.title}>SHIKSHARTHI EDUCATIONAL INSTITUTE</Text>
+            <Text style={academicPdfStyles.subtitle}>Academic History Report</Text>
+          </View>
         </View>
 
         {/* Student Profile */}
@@ -209,41 +209,7 @@ const AcademicHistoryPDF = ({
           )}
         </View>
 
-        {/* Attendance Visual Bar Chart */}
-        {subjectAttendance.length > 0 && (
-          <View style={academicPdfStyles.section}>
-            <Text style={academicPdfStyles.sectionTitle}>Attendance Overview (Visual)</Text>
-            {subjectAttendance.map((sa, i) => (
-              <View key={i} style={academicPdfStyles.barRow}>
-                <Text style={academicPdfStyles.barLabel}>{sa.subject}</Text>
-                <View style={academicPdfStyles.barTrack}>
-                  <View style={{
-                    position: 'absolute', top: 0, left: 0, bottom: 0,
-                    width: `${Math.min(sa.percentage, 100)}%`,
-                    backgroundColor: getBarColor(sa.percentage),
-                    borderRadius: 3
-                  }} />
-                </View>
-                <Text style={[academicPdfStyles.barPctLabel, { color: getBarColor(sa.percentage) }]}>{sa.percentage.toFixed(1)}%</Text>
-              </View>
-            ))}
-            {/* Overall bar */}
-            {overallAttendance !== null && (
-              <View style={[academicPdfStyles.barRow, { marginTop: 4, paddingTop: 6, borderTopWidth: 1, borderTopColor: '#E5E7EB' }]}>
-                <Text style={[academicPdfStyles.barLabel, { fontWeight: 'bold' }]}>Overall</Text>
-                <View style={academicPdfStyles.barTrack}>
-                  <View style={{
-                    position: 'absolute', top: 0, left: 0, bottom: 0,
-                    width: `${Math.min(overallAttendance, 100)}%`,
-                    backgroundColor: '#F59E0B',
-                    borderRadius: 3
-                  }} />
-                </View>
-                <Text style={[academicPdfStyles.barPctLabel, { color: '#D97706', fontWeight: 'bold' }]}>{overallAttendance.toFixed(1)}%</Text>
-              </View>
-            )}
-          </View>
-        )}
+
 
         {/* Examination Record - always shown */}
         <View style={academicPdfStyles.section}>
@@ -275,7 +241,7 @@ const AcademicHistoryPDF = ({
         </View>
 
         <View style={academicPdfStyles.footer}>
-          <Text style={academicPdfStyles.footerText}>This is a computer-generated academic report issued by Shiksharthi OS.</Text>
+          <Text style={academicPdfStyles.footerText}>This is a computer-generated academic report issued by Shiksharthi Educational Institute.</Text>
           <Text style={[academicPdfStyles.footerText, { marginTop: 4 }]}>Generated on {new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}.</Text>
         </View>
       </PdfPage>
@@ -370,6 +336,21 @@ export default function StudentsPage() {
     loadAllBatches();
   }, [currentBranch, currentAcademicYear]);
 
+  // Automatically adjust the form class default and subjects based on current branch class range
+  useEffect(() => {
+    if (!currentBranch) return;
+    const minClass = currentBranch.class_range_min ? String(currentBranch.class_range_min) : '11';
+    setNewStudent(prev => ({
+      ...prev,
+      classVal: minClass,
+      board: '',
+      batchId: '',
+      subjects: ['11', '12'].includes(minClass)
+        ? ['Physics', 'Chemistry', 'Mathematics']
+        : ['Science', 'Mathematics', 'Social Science', 'English']
+    }));
+  }, [currentBranch]);
+
   // Fetch batches when class selection changes
   useEffect(() => {
     async function loadBatches() {
@@ -433,10 +414,9 @@ export default function StudentsPage() {
       if (!currentBranch || !currentAcademicYear) return;
       setLoading(true);
       try {
-        // Real Supabase select
-        const { data, error } = await supabase
-          .from('enrollments')
-          .select(`
+        // Try query with 'board' column first, fallback without it if column doesn't exist yet
+        let data: any[] | null = null;
+        const selectWithBoard = `
             id,
             class,
             board,
@@ -453,18 +433,58 @@ export default function StudentsPage() {
               school,
               address,
               date_of_birth,
-              gender
+              gender,
+              branch_id,
+              board
             ),
             batches (
               id,
               name
             )
-          `)
+          `;
+        const selectWithoutBoard = `
+            id,
+            class,
+            batch_id,
+            package_type,
+            status,
+            subjects_taken,
+            students (
+              id,
+              student_code,
+              name,
+              parent_name,
+              admission_date,
+              school,
+              address,
+              date_of_birth,
+              gender,
+              branch_id
+            ),
+            batches (
+              id,
+              name
+            )
+          `;
+
+        const res1 = await supabase
+          .from('enrollments')
+          .select(selectWithBoard)
           .eq('branch_id', currentBranch.id)
           .eq('academic_year_id', currentAcademicYear.id);
 
-        if (error) {
-          throw error;
+        if (res1.error) {
+          // Fallback: board column may not exist yet
+          console.warn('Query with board column failed, retrying without:', res1.error.message);
+          const res2 = await supabase
+            .from('enrollments')
+            .select(selectWithoutBoard)
+            .eq('branch_id', currentBranch.id)
+            .eq('academic_year_id', currentAcademicYear.id);
+          if (res2.error) throw res2.error;
+          data = res2.data;
+        } else {
+          data = res1.data;
         }
 
         // Map data from query
@@ -475,7 +495,7 @@ export default function StudentsPage() {
           name: item.students?.name || '',
           parent_name: item.students?.parent_name || '',
           class: item.class,
-          board: item.board || '',
+          board: item.students?.board || item.board || '',
           batch_id: item.batch_id || item.batches?.id || '',
           batch_name: item.batches?.name || 'Unassigned',
           package_type: item.package_type || 'Boards',
@@ -525,6 +545,11 @@ export default function StudentsPage() {
       }
     }
 
+    if (!newStudent.batchId) {
+      alert('A batch assignment is required to admit a student. Please configure batches for this class/branch in settings if none exist.');
+      return;
+    }
+
     try {
       // 1. Fetch exact enrollment count to generate unique sequential code e.g. SHK-BGP-0001
       const { count } = await supabase
@@ -535,7 +560,11 @@ export default function StudentsPage() {
       const sequenceNum = String((count || 0) + 1).padStart(4, '0');
       const code = `SHK-${currentBranch.code}-${sequenceNum}`;
 
-      const { data: student, error: sErr } = await supabase
+      // Try to insert student with branch_id and board, fallback if columns do not exist
+      let student;
+      let sErr;
+
+      const { data: sDataWithBranch, error: sErrWithBranch } = await supabase
         .from('students')
         .insert({
           student_code: code,
@@ -545,18 +574,49 @@ export default function StudentsPage() {
           gender: newStudent.gender,
           address: newStudent.address,
           school: newStudent.school,
-          admission_date: new Date().toISOString().split('T')[0]
+          admission_date: new Date().toISOString().split('T')[0],
+          branch_id: currentBranch.id,
+          board: newStudent.board || null
         })
         .select()
         .single();
+
+      if (sErrWithBranch) {
+        console.warn('Student insert with branch_id/board failed, retrying without:', sErrWithBranch.message);
+        const { data: sDataWithoutBranch, error: sErrWithoutBranch } = await supabase
+          .from('students')
+          .insert({
+            student_code: code,
+            name: newStudent.name,
+            parent_name: newStudent.parentName,
+            date_of_birth: newStudent.dob || null,
+            gender: newStudent.gender,
+            address: newStudent.address,
+            school: newStudent.school,
+            admission_date: new Date().toISOString().split('T')[0]
+          })
+          .select()
+          .single();
+
+        if (sErrWithoutBranch) {
+          sErr = sErrWithoutBranch;
+        } else {
+          student = sDataWithoutBranch;
+        }
+      } else {
+        student = sDataWithBranch;
+      }
 
       if (sErr) throw sErr;
 
       // 2. Use the batch selected by the user in the form
       const selectedBatchId = newStudent.batchId || null;
 
-      // 3. Create enrollment
-      const { data: enrollment, error: eErr } = await supabase
+      // 3. Create enrollment (try with board column, fallback if not available)
+      let enrollment;
+      let eErr;
+
+      const { data: eDataWithBoard, error: eErrWithBoard } = await supabase
         .from('enrollments')
         .insert({
           student_id: student.id,
@@ -573,7 +633,39 @@ export default function StudentsPage() {
         .select()
         .single();
 
-      if (eErr) throw eErr;
+      if (eErrWithBoard) {
+        console.warn('Enrollment insert with board failed, retrying without board:', eErrWithBoard.message);
+        const { data: eDataWithoutBoard, error: eErrWithoutBoard } = await supabase
+          .from('enrollments')
+          .insert({
+            student_id: student.id,
+            academic_year_id: currentAcademicYear.id,
+            branch_id: currentBranch.id,
+            class: newStudent.classVal,
+            batch_id: selectedBatchId,
+            package_type: newStudent.packageType,
+            subjects_taken: newStudent.subjects,
+            status: 'Active',
+            status_effective_date: new Date().toISOString().split('T')[0]
+          })
+          .select()
+          .single();
+
+        if (eErrWithoutBoard) {
+          eErr = eErrWithoutBoard;
+        } else {
+          enrollment = eDataWithoutBoard;
+        }
+      } else {
+        enrollment = eDataWithBoard;
+      }
+
+      if (eErr) {
+        // Rollback: delete the orphaned student record since enrollment failed
+        console.error('Enrollment insert failed, rolling back student:', eErr.message);
+        await supabase.from('students').delete().eq('id', student.id);
+        throw eErr;
+      }
 
       // Close and refresh
       setShowAddModal(false);
@@ -612,29 +704,9 @@ export default function StudentsPage() {
         addOns: [],
         subjects: ['Physics', 'Chemistry', 'Mathematics']
       });
-    } catch (err) {
-      console.error(err);
-      // Fallback local update if offline / permission rules not active yet
-      setShowAddModal(false);
-      const code = `SH-${Math.floor(1000 + Math.random() * 9000)}`;
-      const fallbackItem: StudentListItem = {
-        id: `e-temp-${Date.now()}`,
-        studentId: `s-temp-${Date.now()}`,
-        student_code: code,
-        name: newStudent.name,
-        parent_name: newStudent.parentName,
-        class: newStudent.classVal,
-        board: newStudent.board || '',
-        batch_id: '',
-        batch_name: 'Pending Assignment',
-        package_type: newStudent.packageType,
-        status: 'Active',
-        admission_date: new Date().toISOString().split('T')[0],
-        school: newStudent.school || '',
-        address: newStudent.address || '',
-        dob: newStudent.dob || ''
-      };
-      setStudents([fallbackItem, ...students]);
+    } catch (err: any) {
+      console.error('Student admission failed:', err);
+      alert(`Failed to admit student: ${err?.message || 'Unknown error. Please check console for details.'}`);
     }
   };
 
@@ -724,6 +796,10 @@ export default function StudentsPage() {
         subjects.add('Biology (Board)');
       } else if (part.includes('comp') || part.includes('cs') || part === 'com') {
         subjects.add('Computer Science');
+      } else if (part === 'ai' || part === 'artificial intelligence') {
+        subjects.add('AI');
+      } else if (part === 'it' || part === 'information technology') {
+        subjects.add('IT');
       } else {
         // Fallback for custom subject names
         subjects.add(part.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '));
@@ -913,8 +989,11 @@ export default function StudentsPage() {
       for (const row of validRows) {
         const code = `SHK-${currentBranch.code}-${String(nextSeq).padStart(4, '0')}`;
 
-        // 1. Insert Student profile
-        const { data: studentData, error: sErr } = await supabase
+        // 1. Insert Student profile (try with branch_id and board column, fallback if not available)
+        let studentData;
+        let sErr;
+
+        const { data: sDataWithBranch, error: sErrWithBranch } = await supabase
           .from('students')
           .insert({
             student_code: code,
@@ -924,18 +1003,49 @@ export default function StudentsPage() {
             gender: row.gender || 'Male',
             address: row.address || null,
             school: row.school || null,
-            admission_date: new Date().toISOString().split('T')[0]
+            admission_date: new Date().toISOString().split('T')[0],
+            branch_id: currentBranch.id,
+            board: row.board || null
           })
           .select()
           .single();
+
+        if (sErrWithBranch) {
+          console.warn('Bulk student insert with branch/board failed, retrying without:', sErrWithBranch.message);
+          const { data: sDataWithoutBranch, error: sErrWithoutBranch } = await supabase
+            .from('students')
+            .insert({
+              student_code: code,
+              name: row.name,
+              parent_name: row.parentName || null,
+              date_of_birth: row.dob || null,
+              gender: row.gender || 'Male',
+              address: row.address || null,
+              school: row.school || null,
+              admission_date: new Date().toISOString().split('T')[0]
+            })
+            .select()
+            .single();
+
+          if (sErrWithoutBranch) {
+            sErr = sErrWithoutBranch;
+          } else {
+            studentData = sDataWithoutBranch;
+          }
+        } else {
+          studentData = sDataWithBranch;
+        }
 
         if (sErr) {
           skipped.push({ row: row.rowNum, reason: `Database Student error: ${sErr.message}` });
           continue;
         }
 
-        // 2. Insert Enrollment record
-        const { data: enrollData, error: eErr } = await supabase
+        // 2. Insert Enrollment record (try with board column, fallback if not available)
+        let enrollData;
+        let eErr;
+
+        const { data: eDataWithBoard, error: eErrWithBoard } = await supabase
           .from('enrollments')
           .insert({
             student_id: studentData.id,
@@ -951,6 +1061,33 @@ export default function StudentsPage() {
           })
           .select()
           .single();
+
+        if (eErrWithBoard) {
+          console.warn('Bulk enrollment insert with board failed, retrying without board:', eErrWithBoard.message);
+          const { data: eDataWithoutBoard, error: eErrWithoutBoard } = await supabase
+            .from('enrollments')
+            .insert({
+              student_id: studentData.id,
+              academic_year_id: currentAcademicYear.id,
+              branch_id: currentBranch.id,
+              class: row.classVal,
+              batch_id: row.resolvedBatchId,
+              package_type: row.resolvedPackageType,
+              subjects_taken: row.resolvedSubjects,
+              status: row.resolvedStatus,
+              status_effective_date: new Date().toISOString().split('T')[0]
+            })
+            .select()
+            .single();
+
+          if (eErrWithoutBoard) {
+            eErr = eErrWithoutBoard;
+          } else {
+            enrollData = eDataWithoutBoard;
+          }
+        } else {
+          enrollData = eDataWithBoard;
+        }
 
         if (eErr) {
           // Attempt rollback student if enrollment fails
@@ -1491,12 +1628,17 @@ export default function StudentsPage() {
                           }));
                         }}
                       >
-                        <option value="11">Class 11</option>
-                        <option value="12">Class 12</option>
-                        <option value="7">Class 7</option>
-                        <option value="8">Class 8</option>
-                        <option value="9">Class 9</option>
-                        <option value="10">Class 10</option>
+                        {Array.from(
+                          { length: (currentBranch?.class_range_max || 12) - (currentBranch?.class_range_min || 11) + 1 },
+                          (_, i) => {
+                            const cls = String((currentBranch?.class_range_min || 11) + i);
+                            return (
+                              <option key={cls} value={cls}>
+                                Class {cls}
+                              </option>
+                            );
+                          }
+                        )}
                       </select>
                     </div>
                     <div className="form-group" style={{ margin: 0 }}>
@@ -1583,9 +1725,13 @@ export default function StudentsPage() {
                       marginTop: '6px'
                     }}>
                       {(() => {
+                        // Determine if class 7-10 for extra subjects
+                        const isClass7to10 = ['7', '8', '9', '10'].includes(newStudent.classVal);
+                        const extraSubjects7to10 = isClass7to10 ? ['AI', 'IT'] : [];
+
                         if (newStudent.packageType === 'JEE') {
                           const core = ['Physics', 'Chemistry', 'Mathematics'];
-                          const optionals = ['Biology (Board)', 'Biology (NEET)', 'Computer Science'];
+                          const optionals = ['Biology (Board)', 'Biology (NEET)', 'Computer Science', ...extraSubjects7to10];
                           return (
                             <>
                               {core.map(s => (
@@ -1616,7 +1762,7 @@ export default function StudentsPage() {
                           );
                         } else if (newStudent.packageType === 'NEET') {
                           const core = ['Physics', 'Chemistry', 'Biology'];
-                          const optionals = ['Mathematics (Board)', 'Mathematics (JEE)', 'Mathematics (NEET)', 'Computer Science'];
+                          const optionals = ['Mathematics (Board)', 'Mathematics (JEE)', 'Mathematics (NEET)', 'Computer Science', ...extraSubjects7to10];
                           return (
                             <>
                               {core.map(s => (
@@ -1647,7 +1793,7 @@ export default function StudentsPage() {
                           );
                         } else {
                           // Boards
-                          const subjects = ['Physics (Board)', 'Chemistry (Board)', 'Mathematics (Board)', 'Biology (Board)', 'Computer Science'];
+                          const subjects = ['Physics (Board)', 'Chemistry (Board)', 'Mathematics (Board)', 'Biology (Board)', 'Computer Science', ...extraSubjects7to10];
                           return (
                             <>
                               {subjects.map(s => {
@@ -2017,8 +2163,9 @@ export default function StudentsPage() {
         const finalName = toTitleCase(editState.name);
         const finalParentName = toTitleCase(editState.parentName);
 
-        // Update student table
-        const { error: sErr } = await supabase
+        // Update student table (try with board, fallback if columns do not exist yet)
+        let sErr;
+        const { error: sErrWithBoard } = await supabase
           .from('students')
           .update({
             name: finalName,
@@ -2026,9 +2173,28 @@ export default function StudentsPage() {
             date_of_birth: editState.dob || null,
             gender: editState.gender,
             school: editState.school,
-            address: editState.address
+            address: editState.address,
+            board: editState.board || null
           })
           .eq('id', student.studentId);
+
+        if (sErrWithBoard) {
+          console.warn('Student update with board failed, retrying without:', sErrWithBoard.message);
+          const { error: sErrWithoutBoard } = await supabase
+            .from('students')
+            .update({
+              name: finalName,
+              parent_name: finalParentName || null,
+              date_of_birth: editState.dob || null,
+              gender: editState.gender,
+              school: editState.school,
+              address: editState.address
+            })
+            .eq('id', student.studentId);
+          if (sErrWithoutBoard) {
+            sErr = sErrWithoutBoard;
+          }
+        }
 
         if (sErr) throw sErr;
 
@@ -2038,8 +2204,9 @@ export default function StudentsPage() {
           ? getPackageTypeFromBatchName(selectedBatch.name, student.package_type || 'Boards')
           : (student.package_type || 'Boards');
 
-        // Update enrollment table for subjects, batch, package, and board
-        const { error: eErr } = await supabase
+        // Update enrollment table for subjects, batch, package, and board (try with board, fallback if not available)
+        let eErr;
+        const { error: eErrWithBoard } = await supabase
           .from('enrollments')
           .update({
             batch_id: editState.batchId,
@@ -2048,6 +2215,22 @@ export default function StudentsPage() {
             board: editState.board || null
           })
           .eq('id', student.id);
+
+        if (eErrWithBoard) {
+          console.warn('Enrollment update with board failed, retrying without board:', eErrWithBoard.message);
+          const { error: eErrWithoutBoard } = await supabase
+            .from('enrollments')
+            .update({
+              batch_id: editState.batchId,
+              package_type: newPackage,
+              subjects_taken: editState.subjects
+            })
+            .eq('id', student.id);
+          
+          if (eErrWithoutBoard) {
+            eErr = eErrWithoutBoard;
+          }
+        }
 
         if (eErr) throw eErr;
 
@@ -2620,9 +2803,13 @@ export default function StudentsPage() {
                       const packageType = selectedBatch
                         ? getPackageTypeFromBatchName(selectedBatch.name, student.package_type || 'Boards')
                         : (student.package_type || 'Boards');
+                      // Add AI and IT for classes 7-10
+                      const isClass7to10 = ['7', '8', '9', '10'].includes(student.class);
+                      const extraSubjects7to10 = isClass7to10 ? ['AI', 'IT'] : [];
+
                       if (packageType === 'JEE') {
                         const core = ['Physics', 'Chemistry', 'Mathematics'];
-                        const optionals = ['Biology (Board)', 'Biology (NEET)', 'Computer Science'];
+                        const optionals = ['Biology (Board)', 'Biology (NEET)', 'Computer Science', ...extraSubjects7to10];
                         return (
                           <>
                             {core.map(s => (
@@ -2653,7 +2840,7 @@ export default function StudentsPage() {
                         );
                       } else if (packageType === 'NEET') {
                         const core = ['Physics', 'Chemistry', 'Biology'];
-                        const optionals = ['Mathematics (Board)', 'Mathematics (JEE)', 'Mathematics (NEET)', 'Computer Science'];
+                        const optionals = ['Mathematics (Board)', 'Mathematics (JEE)', 'Mathematics (NEET)', 'Computer Science', ...extraSubjects7to10];
                         return (
                           <>
                             {core.map(s => (
@@ -2684,7 +2871,7 @@ export default function StudentsPage() {
                         );
                       } else {
                         // Boards
-                        const subjects = ['Physics (Board)', 'Chemistry (Board)', 'Mathematics (Board)', 'Biology (Board)', 'Computer Science'];
+                        const subjects = ['Physics (Board)', 'Chemistry (Board)', 'Mathematics (Board)', 'Biology (Board)', 'Computer Science', ...extraSubjects7to10];
                         return (
                           <>
                             {subjects.map(s => {

@@ -9,34 +9,33 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
 
 async function test() {
   try {
-    const { data: authData } = await supabase.auth.signInWithPassword({
+    await supabase.auth.signInWithPassword({
       email: 'director@shiksharthi.com',
       password: 'Shiksharthi@123'
     });
 
-    console.log('Fetching batches...');
-    const { data: batches } = await supabase
-      .from('batches')
-      .select('id, name');
-    
-    if (batches && batches.length > 0) {
-      const batchIds = batches.map(b => b.id);
-      
-      const { data, error } = await supabase
-        .from('batch_subjects')
-        .select('*, faculty(name)')
-        .in('batch_id', batchIds);
+    const PUBALI_ID = '7e8829db-256c-4fab-9b9d-167f1d4efbcb';
 
-      if (error) {
-        console.error('Batch Subjects Query Error:', error);
-      } else {
-        console.log('Query succeeded! Result length:', data.length);
-        console.log('Results:', JSON.stringify(data, null, 2));
-      }
-    }
+    // 1. Check enrollments for Pubali
+    const { data: enrollments, error: eErr, count } = await supabase
+      .from('enrollments')
+      .select('*', { count: 'exact' })
+      .eq('branch_id', PUBALI_ID);
+
+    console.log('--- PUBALI ENROLLMENTS ---');
+    console.log('Error:', eErr);
+    console.log('Count:', count);
+    console.log('Data:', JSON.stringify(enrollments, null, 2));
+
+    // 2. Check academic years
+    const { data: years } = await supabase.from('academic_years').select('*');
+    console.log('\n--- ACADEMIC YEARS ---');
+    console.log(JSON.stringify(years, null, 2));
+
   } catch (err) {
     console.error('Unexpected error:', err);
   }
 }
 
 test();
+

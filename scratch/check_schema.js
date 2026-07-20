@@ -14,15 +14,28 @@ async function test() {
       password: 'Shiksharthi@123'
     });
 
+    // Fetch user-defined functions in public schema
     const { data, error } = await supabase
-      .from('enrollments')
-      .select('*')
-      .limit(1);
+      .from('pg_catalog.pg_proc')
+      .select('proname')
+      .limit(10);
 
     if (error) {
-      console.error('Error fetching enrollments:', error);
+      // Let's try calling supabase.rpc with random names to see if we can query functions or information_schema
+      console.log('Error selecting pg_proc:', error.message);
+      
+      // Let's try information_schema.routines
+      const { data: routines, error: rErr } = await supabase
+        .from('information_schema.routines')
+        .select('routine_name')
+        .eq('routine_schema', 'public');
+      if (rErr) {
+        console.log('Error selecting information_schema.routines:', rErr.message);
+      } else {
+        console.log('Routines in public schema:', routines.map(r => r.routine_name));
+      }
     } else {
-      console.log('Enrollment fields:', Object.keys(data[0] || {}));
+      console.log('Functions:', data.map(d => d.proname));
     }
   } catch (err) {
     console.error('Err:', err);

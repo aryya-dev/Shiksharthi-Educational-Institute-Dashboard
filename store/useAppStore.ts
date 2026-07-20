@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export interface Branch {
   id: string;
@@ -35,13 +36,25 @@ interface AppState {
   setUserBranches: (branches: Branch[]) => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
-  currentAcademicYear: null,
-  currentBranch: null,
-  userProfile: null,
-  userBranches: [],
-  setCurrentAcademicYear: (year) => set({ currentAcademicYear: year }),
-  setCurrentBranch: (branch) => set({ currentBranch: branch }),
-  setUserProfile: (profile) => set({ userProfile: profile }),
-  setUserBranches: (branches) => set({ userBranches: branches }),
-}));
+export const useAppStore = create<AppState>()(
+  persist(
+    (set) => ({
+      currentAcademicYear: null,
+      currentBranch: null,
+      userProfile: null,
+      userBranches: [],
+      setCurrentAcademicYear: (year) => set({ currentAcademicYear: year }),
+      setCurrentBranch: (branch) => set({ currentBranch: branch }),
+      setUserProfile: (profile) => set({ userProfile: profile }),
+      setUserBranches: (branches) => set({ userBranches: branches }),
+    }),
+    {
+      name: 'shiksharthi-app-store',
+      // Only persist branch and academic year selections — profile/branches are fetched fresh
+      partialize: (state) => ({
+        currentBranch: state.currentBranch,
+        currentAcademicYear: state.currentAcademicYear,
+      }),
+    }
+  )
+);

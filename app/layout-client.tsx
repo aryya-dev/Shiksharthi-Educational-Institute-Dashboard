@@ -102,15 +102,28 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
 
       setUserBranches(allowedBranches);
 
-      const currentYear = allYears.find(y => y.is_current) || allYears[0] || null;
-      setCurrentAcademicYear(currentYear);
+      // Restore persisted academic year if it exists and is still valid
+      const persistedYear = useAppStore.getState().currentAcademicYear;
+      const isYearValid = persistedYear && allYears.some(y => y.id === persistedYear.id);
+      if (isYearValid) {
+        setCurrentAcademicYear(persistedYear);
+      } else {
+        const currentYear = allYears.find(y => y.is_current) || allYears[0] || null;
+        setCurrentAcademicYear(currentYear);
+      }
 
-      const defaultBranch = allowedBranches.find(b => b.code === 'BGP' && b.is_active) 
-        || allowedBranches.find(b => b.is_active) 
-        || allowedBranches[0] 
-        || null;
-      
-      setCurrentBranch(defaultBranch);
+      // Restore persisted branch if it exists and is still valid
+      const persistedBranch = useAppStore.getState().currentBranch;
+      const isBranchValid = persistedBranch && allowedBranches.some(b => b.id === persistedBranch.id);
+      if (isBranchValid) {
+        setCurrentBranch(persistedBranch);
+      } else {
+        const defaultBranch = allowedBranches.find(b => b.code === 'BGP' && b.is_active) 
+          || allowedBranches.find(b => b.is_active) 
+          || allowedBranches[0] 
+          || null;
+        setCurrentBranch(defaultBranch);
+      }
       setLoading(false);
     }
 
