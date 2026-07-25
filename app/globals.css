@@ -144,7 +144,107 @@ h3, .card-title {
   top: 0;
   bottom: 0;
   left: 0;
-  z-index: 100;
+  z-index: 200;
+  overflow: hidden;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--divider-color) transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background-color: var(--divider-color);
+  border-radius: 4px;
+}
+
+.sidebar-footer {
+  border-top: 1px solid var(--border-color);
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* Sidebar Backdrop (mobile/tablet) */
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  z-index: 199;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.sidebar-backdrop.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Hamburger menu button (hidden on desktop) */
+.hamburger-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--surface-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: var(--transition-normal);
+  flex-shrink: 0;
+}
+
+.hamburger-btn:hover {
+  background: var(--bg-color);
+  border-color: var(--text-secondary);
+}
+
+/* Sidebar close button (inside drawer, mobile only) */
+.sidebar-close-btn {
+  display: none;
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-color);
+  color: var(--text-secondary);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-normal);
+  z-index: 10;
+}
+
+.sidebar-close-btn:hover {
+  background: var(--border-color);
+  color: var(--text-primary);
 }
 
 .main-content {
@@ -195,45 +295,12 @@ h3, .card-title {
   min-height: 38px;
 }
 
-/* Mobile Bottom Navigation (Hidden on Desktop) */
-.bottom-nav {
-  display: none;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 64px;
-  background-color: var(--surface-card);
-  border-top: 1px solid var(--border-color);
-  z-index: 100;
-  box-shadow: 0 -2px 10px rgba(0,0,0,0.04);
-}
-
-.bottom-nav-inner {
-  display: flex;
-  justify-content: space-around;
-  align-items: center;
-  height: 100%;
-}
-
-.bottom-nav-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-decoration: none;
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 500;
-  gap: 4px;
-  cursor: pointer;
-  padding: var(--space-1) var(--space-3);
-  min-width: 56px;
-  min-height: 44px;
-  justify-content: center;
-}
-
-.bottom-nav-item.active {
-  color: var(--primary-orange);
+/* Attendance responsive grid */
+.attendance-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 24px;
+  align-items: start;
 }
 
 /* ══════════════════════════════════════════
@@ -634,18 +701,39 @@ h3, .card-title {
    ══════════════════════════════════════════ */
 
 @media (max-width: 1023px) {
+  /* Sidebar becomes a slide-out drawer */
   .sidebar {
-    display: none;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: none;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+  }
+
+  .sidebar-backdrop {
+    display: block;
+  }
+
+  .sidebar-close-btn {
+    display: flex;
+  }
+
+  .hamburger-btn {
+    display: flex;
   }
 
   .main-content {
     margin-left: 0;
     padding: 20px;
-    padding-bottom: 80px;
+    padding-bottom: 24px;
   }
 
-  .bottom-nav {
-    display: block;
+  /* Attendance grid stacks on tablet */
+  .attendance-grid {
+    grid-template-columns: 1fr;
   }
 
   /* 2-col grids stack on tablet */
@@ -712,8 +800,14 @@ h3, .card-title {
 
   /* Main content compact padding */
   .main-content {
-    padding: 16px;
-    padding-bottom: 80px;
+    padding: 12px;
+    padding-bottom: 16px;
+  }
+
+  /* Attendance grid stacks fully on mobile */
+  .attendance-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
 
   /* Cards compact padding */
@@ -894,5 +988,19 @@ h3, .card-title {
     object-fit: contain;
     margin-right: 8px;
   }
+}
+
+/* Edit mode banner styling */
+.edit-mode-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  background-color: #FFFBEB;
+  border: 1px solid #FDE68A;
+  color: #92400E;
+  font-size: 13px;
+  font-weight: 600;
 }
 

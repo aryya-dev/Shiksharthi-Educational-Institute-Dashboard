@@ -1,85 +1,10 @@
 -- ============================================================================
--- Migration: Complete Class Submission System & Daily Class Reports
--- Date: 2026-07-10
+-- Migration: Update complete_class to support editing existing attendance
+-- Date: 2026-07-25
+-- Description: Makes complete_class idempotent - if a session already exists
+--              for the same batch/date/time/subject, it updates instead of inserting.
 -- ============================================================================
 
--- 1. Add new columns to class_sessions
-ALTER TABLE class_sessions ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Completed' NOT NULL;
-ALTER TABLE class_sessions ADD COLUMN IF NOT EXISTS homework_title VARCHAR(255);
-ALTER TABLE class_sessions ADD COLUMN IF NOT EXISTS homework_description TEXT;
-ALTER TABLE class_sessions ADD COLUMN IF NOT EXISTS homework_due_date DATE;
-ALTER TABLE class_sessions ADD COLUMN IF NOT EXISTS faculty_notes TEXT;
-ALTER TABLE class_sessions ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP WITH TIME ZONE;
-
--- 2. Create homework_defaulters table
-CREATE TABLE IF NOT EXISTS homework_defaulters (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id UUID REFERENCES class_sessions(id) ON DELETE CASCADE NOT NULL,
-  enrollment_id UUID REFERENCES enrollments(id) ON DELETE CASCADE NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-  UNIQUE(session_id, enrollment_id)
-);
-
--- Enable RLS
-ALTER TABLE homework_defaulters ENABLE ROW LEVEL SECURITY;
-
--- RLS Policies for homework_defaulters
-CREATE POLICY "View Homework Defaulters" ON homework_defaulters FOR SELECT TO authenticated
-  USING (
-    is_director(auth.uid()) OR
-    EXISTS (
-      SELECT 1 FROM enrollments e
-      WHERE e.id = homework_defaulters.enrollment_id AND has_branch_access(auth.uid(), e.branch_id)
-    )
-  );
-
-CREATE POLICY "Manage Homework Defaulters" ON homework_defaulters FOR ALL TO authenticated
-  USING (
-    is_director(auth.uid()) OR
-    EXISTS (
-      SELECT 1 FROM enrollments e
-      WHERE e.id = homework_defaulters.enrollment_id AND has_branch_access(auth.uid(), e.branch_id)
-    )
-  );
-
--- 3. Create daily_class_reports table
-CREATE TABLE IF NOT EXISTS daily_class_reports (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id UUID REFERENCES class_sessions(id) ON DELETE CASCADE UNIQUE NOT NULL,
-  batch_id UUID REFERENCES batches(id) ON DELETE CASCADE NOT NULL,
-  subject_name VARCHAR(100) NOT NULL,
-  faculty_id UUID REFERENCES faculty(id) ON DELETE SET NULL,
-  faculty_name VARCHAR(255) NOT NULL,
-  batch_name VARCHAR(100) NOT NULL,
-  date DATE NOT NULL,
-  start_time TIME NOT NULL,
-  end_time TIME NOT NULL,
-  present_count INT NOT NULL DEFAULT 0,
-  absent_count INT NOT NULL DEFAULT 0,
-  leave_count INT NOT NULL DEFAULT 0,
-  attendance_percentage NUMERIC(5, 2) NOT NULL DEFAULT 0,
-  chapter_covered VARCHAR(255) NOT NULL,
-  homework_title VARCHAR(255),
-  homework_description TEXT,
-  homework_due_date DATE,
-  absentee_list JSONB DEFAULT '[]'::jsonb NOT NULL,
-  homework_defaulter_list JSONB DEFAULT '[]'::jsonb NOT NULL,
-  academic_year_id UUID REFERENCES academic_years(id) ON DELETE CASCADE NOT NULL,
-  branch_id UUID REFERENCES branches(id) ON DELETE CASCADE NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
--- Enable RLS
-ALTER TABLE daily_class_reports ENABLE ROW LEVEL SECURITY;
-
--- RLS Policies for daily_class_reports
-CREATE POLICY "View Daily Class Reports" ON daily_class_reports FOR SELECT TO authenticated
-  USING (is_director(auth.uid()) OR has_branch_access(auth.uid(), branch_id));
-
-CREATE POLICY "Manage Daily Class Reports" ON daily_class_reports FOR ALL TO authenticated
-  USING (is_director(auth.uid()) OR has_branch_access(auth.uid(), branch_id));
-
--- 4. Create the complete_class RPC function (atomic transaction)
 CREATE OR REPLACE FUNCTION complete_class(
   p_batch_ids UUID[],
   p_subject_name VARCHAR,
@@ -94,8 +19,8 @@ CREATE OR REPLACE FUNCTION complete_class(
   p_homework_title VARCHAR,
   p_homework_description TEXT,
   p_homework_due_date DATE,
-  p_attendance JSONB,          -- [{ "enrollment_id": "...", "status": "Present|Absent|Leave", "batch_id": "..." }]
-  p_defaulter_ids UUID[],      -- enrollment IDs of homework defaulters
+  p_attendance JSONB,
+  p_defaulter_ids UUID[],
   p_academic_year_id UUID,
   p_branch_id UUID
 )
@@ -222,7 +147,6 @@ BEGIN
         v_def_batch UUID;
       BEGIN
         FOREACH v_def_id IN ARRAY p_defaulter_ids LOOP
-          -- Only insert if this defaulter belongs to this batch
           SELECT e.batch_id INTO v_def_batch FROM enrollments e WHERE e.id = v_def_id;
           IF v_def_batch = v_batch_id THEN
             INSERT INTO homework_defaulters (session_id, enrollment_id)
@@ -276,7 +200,7 @@ BEGIN
       v_absentee_list, v_defaulter_list,
       p_academic_year_id, p_branch_id
     )
-    RETURNING id INTO v_session_id; -- reuse variable for report id
+    RETURNING id INTO v_session_id;
     v_report_ids := v_report_ids || v_session_id;
   END LOOP;
 

@@ -130,6 +130,11 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
     initApp();
   }, [pathname]);
 
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
+
   const handleSignOut = async () => {
     document.cookie = 'demo_mode=; path=/; max-age=0';
     document.cookie = 'demo_role=; path=/; max-age=0';
@@ -173,9 +178,23 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
 
   return (
     <div className="app-layout">
-      {/* Sidebar - Desktop Only */}
-      <aside className="sidebar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '32px', padding: '0 4px' }}>
+      {/* Sidebar Backdrop (mobile/tablet) */}
+      <div 
+        className={`sidebar-backdrop ${mobileMenuOpen ? 'visible' : ''}`}
+        onClick={() => setMobileMenuOpen(false)}
+      />
+
+      {/* Sidebar - Desktop always visible, Mobile/Tablet slide-out drawer */}
+      <aside className={`sidebar ${mobileMenuOpen ? 'open' : ''}`}>
+        <button 
+          className="sidebar-close-btn" 
+          onClick={() => setMobileMenuOpen(false)}
+          aria-label="Close menu"
+        >
+          <X size={18} />
+        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '32px', padding: '0 4px', flexShrink: 0 }}>
           <img 
             src="/logo.png" 
             alt="Shiksharthi Logo" 
@@ -183,7 +202,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
           />
         </div>
 
-        <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+        <nav className="sidebar-nav">
           {visibleNavItems.map((item) => {
             const isActive = pathname.startsWith(item.path);
             const Icon = item.icon;
@@ -192,6 +211,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
                 key={item.path} 
                 href={item.path}
                 className="btn btn-tertiary"
+                onClick={() => setMobileMenuOpen(false)}
                 style={{ 
                   justifyContent: 'flex-start',
                   color: isActive ? 'var(--primary-orange)' : 'var(--text-secondary)',
@@ -208,7 +228,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         </nav>
 
         {userProfile && (
-          <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div className="sidebar-footer">
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <span style={{ fontWeight: '600', color: 'var(--text-primary)' }}>{userProfile.name}</span>
               <span style={{ fontSize: '12px' }} className="badge badge-info">
@@ -232,6 +252,13 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         {/* Header */}
         <header className="header-bar">
           <div className="header-left" style={{ display: 'flex', alignItems: 'center' }}>
+            <button 
+              className="hamburger-btn" 
+              onClick={() => setMobileMenuOpen(true)}
+              aria-label="Open menu"
+            >
+              <Menu size={22} />
+            </button>
             <img 
               src="/logo.png" 
               className="mobile-logo" 
@@ -281,26 +308,6 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
 
         <main>{children}</main>
       </div>
-
-      {/* Mobile Bottom Navigation Bar */}
-      <nav className="bottom-nav">
-        <div className="bottom-nav-inner">
-          {visibleNavItems.slice(0, 5).map((item) => {
-            const isActive = pathname.startsWith(item.path);
-            const Icon = item.icon;
-            return (
-              <Link 
-                key={item.path} 
-                href={item.path}
-                className={`bottom-nav-item ${isActive ? 'active' : ''}`}
-              >
-                <Icon size={22} />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
     </div>
   );
 }

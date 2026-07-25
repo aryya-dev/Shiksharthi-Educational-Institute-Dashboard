@@ -20,7 +20,8 @@ import {
   ChevronUp,
   BookMarked,
   StickyNote,
-  AlertTriangle
+  AlertTriangle,
+  Edit3
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { createClient } from '@/utils/supabase/client';
@@ -109,6 +110,12 @@ export default function AttendancePage() {
 
   // --- Active step tracking ---
   const [activeStep, setActiveStep] = useState<number>(1); // 1=attendance, 2=chapter+homework, 3=defaulters+notes
+
+  // --- Edit Mode ---
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editSessionIds, setEditSessionIds] = useState<string[]>([]);
+  const [pendingAttendanceMap, setPendingAttendanceMap] = useState<Map<string, string> | null>(null);
+  const [pendingDefaulterIds, setPendingDefaulterIds] = useState<Set<string> | null>(null);
 
   // Derived: present students for defaulters list
   const presentStudents = useMemo(() => 
@@ -314,6 +321,94 @@ export default function AttendancePage() {
     setDefaultersExpanded(false);
     setFacultyNotes('');
     setActiveStep(1);
+    setIsEditMode(false);
+    setEditSessionIds([]);
+    setPendingAttendanceMap(null);
+    setPendingDefaulterIds(null);
+  };
+
+  // Apply pending attendance data when students finish loading
+  useEffect(() => {
+    if (pendingAttendanceMap && studentList.length > 0) {
+      setStudentList(prev => prev.map(st => {
+        const existingStatus = pendingAttendanceMap.get(st.enrollmentId);
+        if (existingStatus) {
+          return { ...st, status: existingStatus as 'Present' | 'Absent' | 'Leave' };
+        }
+        return st;
+      }));
+      setPendingAttendanceMap(null);
+    }
+  }, [studentList.length, pendingAttendanceMap]);
+
+  // Apply pending defaulter IDs when students finish loading
+  useEffect(() => {
+    if (pendingDefaulterIds && studentList.length > 0) {
+      setHomeworkDefaulters(pendingDefaulterIds);
+      if (pendingDefaulterIds.size > 0) setDefaultersExpanded(true);
+      setPendingDefaulterIds(null);
+    }
+  }, [studentList.length, pendingDefaulterIds]);
+
+  // Load existing session data for editing
+  const loadExistingSession = async (cls: ScheduledClassItem) => {
+    try {
+      const batchIds = cls.batches.map(b => b.id);
+
+      // Find existing class_sessions matching this class
+      const { data: sessions } = await supabase
+        .from('class_sessions')
+        .select('id, chapter_covered, faculty_notes, homework_title, homework_description, homework_due_date')
+        .eq('date', date)
+        .eq('subject_name', cls.subject)
+        .eq('start_time', `${cls.startTime}:00`)
+        .eq('end_time', `${cls.endTime}:00`)
+        .in('batch_id', batchIds);
+
+      if (!sessions || sessions.length === 0) return;
+
+      const sessionIds = sessions.map((s: any) => s.id);
+      setEditSessionIds(sessionIds);
+
+      // Load chapter, homework, notes from first session (same across batches)
+      const firstSession = sessions[0];
+      setChapterCovered(firstSession.chapter_covered || '');
+      setFacultyNotes(firstSession.faculty_notes || '');
+      setHomeworkTitle(firstSession.homework_title || '');
+      setHomeworkDescription(firstSession.homework_description || '');
+      setHomeworkDueDate(firstSession.homework_due_date || '');
+      if (firstSession.homework_title) setHomeworkExpanded(true);
+
+      // Load existing attendance records
+      const { data: attendanceData } = await supabase
+        .from('attendance')
+        .select('enrollment_id, status')
+        .in('session_id', sessionIds);
+
+      if (attendanceData && attendanceData.length > 0) {
+        const attendanceMap = new Map<string, string>();
+        attendanceData.forEach((a: any) => {
+          attendanceMap.set(a.enrollment_id, a.status);
+        });
+        // Store for deferred application when students load
+        setPendingAttendanceMap(attendanceMap);
+      }
+
+      // Load existing homework defaulters
+      const { data: defaulterData } = await supabase
+        .from('homework_defaulters')
+        .select('enrollment_id')
+        .in('session_id', sessionIds);
+
+      if (defaulterData && defaulterData.length > 0) {
+        const defSet = new Set<string>(defaulterData.map((d: any) => d.enrollment_id));
+        setPendingDefaulterIds(defSet);
+      }
+
+      setIsEditMode(true);
+    } catch (err) {
+      console.error('Error loading existing session:', err);
+    }
   };
 
   const handleMarkAll = (status: 'Present' | 'Absent') => {
@@ -487,7 +582,7 @@ export default function AttendancePage() {
       </div>
 
       {/* Main Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 2fr)', gap: '24px', alignItems: 'start' }}>
+      <div className="attendance-grid">
 
         {/* LEFT: Scheduled Classes for the Day */}
         <div className="card" style={{ margin: 0, padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -580,7 +675,16 @@ export default function AttendancePage() {
                     key={cls.key}
                     type="button"
                     onClick={() => {
-                      if (isMarked) return;
+                      if (isMarked) {
+                        // Edit mode: load existing session data
+                        setSelectedClass(cls);
+                        setStudentList([]);
+                        setSuccessMsg(null);
+                        setErrorMsg(null);
+                        resetFormFields();
+                        loadExistingSession(cls);
+                        return;
+                      }
                       setSelectedClass(isSelected ? null : cls);
                       setStudentList([]);
                       setSuccessMsg(null);
@@ -595,7 +699,7 @@ export default function AttendancePage() {
                       borderRadius: 'var(--radius-sm)',
                       border: `1px solid ${isSelected ? 'var(--primary-orange)' : isMarked ? '#A7F3D0' : 'var(--border-color)'}`,
                       backgroundColor: isSelected ? 'rgba(255, 107, 53, 0.05)' : isMarked ? '#F0FDF4' : 'var(--surface-hover)',
-                      cursor: isMarked ? 'default' : 'pointer',
+                      cursor: 'pointer',
                       textAlign: 'left',
                       width: '100%',
                       transition: 'all 0.15s'
@@ -622,6 +726,7 @@ export default function AttendancePage() {
                       </div>
                     </div>
                     {!isMarked && <ChevronRight size={14} style={{ color: 'var(--text-secondary)', marginTop: '4px', flexShrink: 0 }} />}
+                    {isMarked && <Edit3 size={14} style={{ color: 'var(--text-secondary)', marginTop: '4px', flexShrink: 0 }} />}
                   </button>
                 );
               })}
@@ -634,11 +739,18 @@ export default function AttendancePage() {
           {(!selectedClass && !manualMode) ? (
             <div className="card" style={{ margin: 0, padding: '48px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
               <ClipboardCheck size={36} style={{ color: 'var(--text-secondary)', opacity: 0.4 }} />
-              <p style={{ color: 'var(--text-secondary)', fontSize: '15px' }}>Select a class from the left to complete</p>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>Attendance, homework, and report will be saved together</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '15px' }}>Select a class from the schedule to complete</p>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>Click completed classes to edit their attendance</p>
             </div>
           ) : (
             <>
+              {/* Edit Mode Banner */}
+              {isEditMode && (
+                <div className="edit-mode-banner">
+                  <Edit3 size={16} />
+                  <span>Editing Submitted Attendance — changes will update the database</span>
+                </div>
+              )}
               {/* Class Info Banner */}
               {selectedClass && (
                 <div className="card" style={{ margin: 0, padding: '14px 18px', backgroundColor: 'rgba(255, 107, 53, 0.04)', border: '1px solid rgba(255, 107, 53, 0.2)' }}>
@@ -953,7 +1065,7 @@ export default function AttendancePage() {
                 disabled={submitting || studentList.length === 0}
               >
                 <CheckCircle size={20} />
-                <span>{submitting ? 'Completing Class...' : 'Complete Class'}</span>
+                <span>{submitting ? (isEditMode ? 'Updating...' : 'Completing Class...') : (isEditMode ? 'Update Attendance & Report' : 'Complete Class')}</span>
               </button>
             </>
           )}
