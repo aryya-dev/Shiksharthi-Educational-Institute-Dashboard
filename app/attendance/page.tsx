@@ -21,7 +21,8 @@ import {
   BookMarked,
   StickyNote,
   AlertTriangle,
-  Edit3
+  Edit3,
+  Award
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { createClient } from '@/utils/supabase/client';
@@ -87,6 +88,7 @@ export default function AttendancePage() {
   // --- Chapter Covered (mandatory) ---
   const [chapterCovered, setChapterCovered] = useState('');
   const [chapterError, setChapterError] = useState(false);
+  const [isExam, setIsExam] = useState(false);
 
   // --- Homework fields (optional) ---
   const [homeworkTitle, setHomeworkTitle] = useState('');
@@ -310,6 +312,7 @@ export default function AttendancePage() {
   }, [presentStudents]);
 
   const resetFormFields = () => {
+    setIsExam(false);
     setChapterCovered('');
     setChapterError(false);
     setHomeworkTitle('');
@@ -358,7 +361,7 @@ export default function AttendancePage() {
       // Find existing class_sessions matching this class
       const { data: sessions } = await supabase
         .from('class_sessions')
-        .select('id, chapter_covered, faculty_notes, homework_title, homework_description, homework_due_date')
+        .select('id, chapter_covered, faculty_notes, homework_title, homework_description, homework_due_date, is_exam')
         .eq('date', date)
         .eq('subject_name', cls.subject)
         .eq('start_time', `${cls.startTime}:00`)
@@ -372,6 +375,7 @@ export default function AttendancePage() {
 
       // Load chapter, homework, notes from first session (same across batches)
       const firstSession = sessions[0];
+      setIsExam(!!firstSession.is_exam);
       setChapterCovered(firstSession.chapter_covered || '');
       setFacultyNotes(firstSession.faculty_notes || '');
       setHomeworkTitle(firstSession.homework_title || '');
@@ -450,7 +454,7 @@ export default function AttendancePage() {
       setChapterError(false);
     }
 
-    if (homeworkTitle.trim() && !homeworkDueDate) {
+    if (!isExam && homeworkTitle.trim() && !homeworkDueDate) {
       setHomeworkDueDateError(true);
       hasError = true;
     } else {
@@ -497,13 +501,14 @@ export default function AttendancePage() {
         p_is_extra_class: effectiveIsExtra,
         p_chapter_covered: chapterCovered.trim(),
         p_faculty_notes: facultyNotes.trim() || null,
-        p_homework_title: homeworkTitle.trim() || null,
-        p_homework_description: homeworkDescription.trim() || null,
-        p_homework_due_date: homeworkDueDate || null,
+        p_homework_title: isExam ? null : (homeworkTitle.trim() || null),
+        p_homework_description: isExam ? null : (homeworkDescription.trim() || null),
+        p_homework_due_date: isExam ? null : (homeworkDueDate || null),
         p_attendance: attendancePayload,
-        p_defaulter_ids: Array.from(homeworkDefaulters),
+        p_defaulter_ids: isExam ? [] : Array.from(homeworkDefaulters),
         p_academic_year_id: currentAcademicYear!.id,
-        p_branch_id: currentBranch!.id
+        p_branch_id: currentBranch!.id,
+        p_is_exam: isExam
       });
 
       if (error) throw error;
@@ -838,197 +843,248 @@ export default function AttendancePage() {
                 )}
               </div>
 
-              {/* ═══ STEP 2: Chapter Covered (mandatory) + Homework (optional) ═══ */}
+              {/* ═══ STEP 2: Exam Toggle + Chapter Covered (mandatory) + Homework (optional) ═══ */}
               <div className="card" style={{ margin: 0, padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--primary-orange)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '700' }}>2</div>
-                  <h3 style={{ fontSize: '16px' }}>Chapter & Homework</h3>
+                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: isExam ? '#7C3AED' : 'var(--primary-orange)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '700' }}>2</div>
+                  <h3 style={{ fontSize: '16px' }}>{isExam ? 'Exam Details' : 'Chapter & Homework'}</h3>
                 </div>
 
-                {/* Chapter Covered - Mandatory */}
+                {/* Exam Occurred Toggle */}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 16px',
+                  borderRadius: 'var(--radius-sm)',
+                  backgroundColor: isExam ? '#F3E8FF' : '#F8FAFC',
+                  border: `1px solid ${isExam ? '#A855F7' : 'var(--border-color)'}`,
+                  transition: 'all 0.2s'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Award size={18} style={{ color: isExam ? '#7E22CE' : 'var(--text-secondary)' }} />
+                    <div>
+                      <span style={{ fontSize: '14px', fontWeight: '700', color: isExam ? '#6B21A8' : 'var(--text-primary)' }}>Exam Occurred?</span>
+                      <p style={{ fontSize: '11px', color: isExam ? '#7E22CE' : 'var(--text-secondary)', margin: '2px 0 0' }}>
+                        {isExam ? 'Classwork will be marked as Exam Name & Chapters Included, and Absentees will be listed as Exam Defaulters' : 'Toggle ON if an exam/test was conducted during this session'}
+                      </p>
+                    </div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={isExam}
+                    onChange={e => {
+                      const checked = e.target.checked;
+                      setIsExam(checked);
+                      if (checked) {
+                        setHomeworkTitle('');
+                        setHomeworkDescription('');
+                        setHomeworkDueDate('');
+                        setHomeworkExpanded(false);
+                        setHomeworkDefaulters(new Set());
+                      }
+                    }}
+                    style={{
+                      width: '18px',
+                      height: '18px',
+                      accentColor: '#7E22CE',
+                      cursor: 'pointer'
+                    }}
+                  />
+                </div>
+
+                {/* Chapter Covered / Exam Name - Mandatory */}
                 <div className="form-group" style={{ margin: 0 }}>
                   <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <BookOpen size={14} />
-                    Chapter / Topic Covered <span style={{ color: 'var(--color-error)' }}>*</span>
+                    {isExam ? 'Exam Name & Chapters Included' : 'Chapter / Topic Covered'} <span style={{ color: 'var(--color-error)' }}>*</span>
                   </label>
                   <input 
                     type="text" 
                     className="form-control" 
-                    placeholder="e.g. Integrals – Lecture 1" 
+                    placeholder={isExam ? "e.g. Unit Test 1 – Kinematics & Work Power Energy" : "e.g. Integrals – Lecture 1"} 
                     value={chapterCovered} 
                     onChange={e => { setChapterCovered(e.target.value); if (e.target.value.trim()) setChapterError(false); }}
                     style={chapterError ? { borderColor: 'var(--color-error)', boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.1)' } : {}}
                   />
                   {chapterError && (
                     <span style={{ fontSize: '11px', color: 'var(--color-error)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <AlertTriangle size={11} /> Chapter Covered is required
+                      <AlertTriangle size={11} /> {isExam ? 'Exam Name & Chapters Included is required' : 'Chapter Covered is required'}
                     </span>
                   )}
                 </div>
 
-                {/* Homework Section - Collapsible */}
-                <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-                  <button
-                    type="button"
-                    onClick={() => setHomeworkExpanded(!homeworkExpanded)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      width: '100%',
-                      padding: '12px 16px',
-                      border: 'none',
-                      backgroundColor: homeworkExpanded ? 'rgba(245, 158, 11, 0.06)' : 'var(--surface-card)',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <BookMarked size={16} style={{ color: 'var(--primary-orange)' }} />
-                      <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
-                        Homework for Next Class
-                      </span>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '400' }}>
-                        (Optional)
-                      </span>
-                      {homeworkTitle.trim() && (
-                        <span style={{ fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '100px', backgroundColor: '#D1FAE5', color: '#065F46' }}>
-                          Assigned
+                {/* Homework Section - Collapsible (hidden if exam) */}
+                {!isExam ? (
+                  <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                    <button
+                      type="button"
+                      onClick={() => setHomeworkExpanded(!homeworkExpanded)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        width: '100%',
+                        padding: '12px 16px',
+                        border: 'none',
+                        backgroundColor: homeworkExpanded ? 'rgba(245, 158, 11, 0.06)' : 'var(--surface-card)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <BookMarked size={16} style={{ color: 'var(--primary-orange)' }} />
+                        <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                          Homework for Next Class
                         </span>
-                      )}
-                    </div>
-                    {homeworkExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
-                  </button>
-
-                  {homeworkExpanded && (
-                    <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--border-color)' }}>
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label">Homework Title</label>
-                        <input 
-                          type="text" 
-                          className="form-control" 
-                          placeholder="e.g. Exercise 6" 
-                          value={homeworkTitle} 
-                          onChange={e => setHomeworkTitle(e.target.value)}
-                        />
-                      </div>
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label">Description</label>
-                        <textarea 
-                          className="form-control" 
-                          placeholder="e.g. Solve Question 1-20" 
-                          value={homeworkDescription} 
-                          onChange={e => setHomeworkDescription(e.target.value)}
-                          rows={2}
-                          style={{ resize: 'vertical', minHeight: '60px' }}
-                        />
-                      </div>
-                      <div className="form-group" style={{ margin: 0 }}>
-                        <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          Due Date {homeworkTitle.trim() && <span style={{ color: 'var(--color-error)' }}>*</span>}
-                        </label>
-                        <input 
-                          type="date" 
-                          className="form-control" 
-                          value={homeworkDueDate} 
-                          onChange={e => { setHomeworkDueDate(e.target.value); if (e.target.value) setHomeworkDueDateError(false); }}
-                          style={homeworkDueDateError ? { borderColor: 'var(--color-error)', boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.1)' } : {}}
-                        />
-                        {homeworkDueDateError && (
-                          <span style={{ fontSize: '11px', color: 'var(--color-error)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <AlertTriangle size={11} /> Due Date is required when homework is assigned
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '400' }}>
+                          (Optional)
+                        </span>
+                        {homeworkTitle.trim() && (
+                          <span style={{ fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '100px', backgroundColor: '#D1FAE5', color: '#065F46' }}>
+                            Assigned
                           </span>
                         )}
                       </div>
-                    </div>
-                  )}
-                </div>
+                      {homeworkExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
+                    </button>
+
+                    {homeworkExpanded && (
+                      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', borderTop: '1px solid var(--border-color)' }}>
+                        <div className="form-group" style={{ margin: 0 }}>
+                          <label className="form-label">Homework Title</label>
+                          <input 
+                            type="text" 
+                            className="form-control" 
+                            placeholder="e.g. Exercise 6" 
+                            value={homeworkTitle} 
+                            onChange={e => setHomeworkTitle(e.target.value)}
+                          />
+                        </div>
+                        <div className="form-group" style={{ margin: 0 }}>
+                          <label className="form-label">Description</label>
+                          <textarea 
+                            className="form-control" 
+                            placeholder="e.g. Solve Question 1-20" 
+                            value={homeworkDescription} 
+                            onChange={e => setHomeworkDescription(e.target.value)}
+                            rows={2}
+                            style={{ resize: 'vertical', minHeight: '60px' }}
+                          />
+                        </div>
+                        <div className="form-group" style={{ margin: 0 }}>
+                          <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            Due Date {homeworkTitle.trim() && <span style={{ color: 'var(--color-error)' }}>*</span>}
+                          </label>
+                          <input 
+                            type="date" 
+                            className="form-control" 
+                            value={homeworkDueDate} 
+                            onChange={e => { setHomeworkDueDate(e.target.value); if (e.target.value) setHomeworkDueDateError(false); }}
+                            style={homeworkDueDateError ? { borderColor: 'var(--color-error)', boxShadow: '0 0 0 2px rgba(239, 68, 68, 0.1)' } : {}}
+                          />
+                          {homeworkDueDateError && (
+                            <span style={{ fontSize: '11px', color: 'var(--color-error)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <AlertTriangle size={11} /> Due Date is required when homework is assigned
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ padding: '10px 14px', backgroundColor: '#FAF5FF', border: '1px dashed #D8B4FE', borderRadius: 'var(--radius-sm)', fontSize: '12px', color: '#6B21A8', textAlign: 'center' }}>
+                    <strong>Exam Mode Active:</strong> Homework is disabled for exam sessions.
+                  </div>
+                )}
               </div>
 
               {/* ═══ STEP 3: Homework Defaulters + Faculty Notes ═══ */}
               <div className="card" style={{ margin: 0, padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
-                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: 'var(--primary-orange)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '700' }}>3</div>
-                  <h3 style={{ fontSize: '16px' }}>Defaulters & Notes</h3>
+                  <div style={{ width: '24px', height: '24px', borderRadius: '50%', backgroundColor: isExam ? '#7C3AED' : 'var(--primary-orange)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '700' }}>3</div>
+                  <h3 style={{ fontSize: '16px' }}>{isExam ? 'Faculty Notes' : 'Defaulters & Notes'}</h3>
                 </div>
 
-                {/* Homework Defaulters */}
-                <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-                  <button
-                    type="button"
-                    onClick={() => setDefaultersExpanded(!defaultersExpanded)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      width: '100%',
-                      padding: '12px 16px',
-                      border: 'none',
-                      backgroundColor: defaultersExpanded ? 'rgba(239, 68, 68, 0.04)' : 'var(--surface-card)',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <AlertCircle size={16} style={{ color: '#EF4444' }} />
-                      <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
-                        Homework Defaulters
-                      </span>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '400' }}>
-                        (from Present students)
-                      </span>
-                      {homeworkDefaulters.size > 0 && (
-                        <span style={{ fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '100px', backgroundColor: '#FEE2E2', color: '#DC2626' }}>
-                          {homeworkDefaulters.size} defaulter{homeworkDefaulters.size > 1 ? 's' : ''}
+                {/* Homework Defaulters (Only if NOT Exam) */}
+                {!isExam && (
+                  <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                    <button
+                      type="button"
+                      onClick={() => setDefaultersExpanded(!defaultersExpanded)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        width: '100%',
+                        padding: '12px 16px',
+                        border: 'none',
+                        backgroundColor: defaultersExpanded ? 'rgba(239, 68, 68, 0.04)' : 'var(--surface-card)',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <AlertCircle size={16} style={{ color: '#EF4444' }} />
+                        <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                          Homework Defaulters
                         </span>
-                      )}
-                    </div>
-                    {defaultersExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
-                  </button>
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: '400' }}>
+                          (from Present students)
+                        </span>
+                        {homeworkDefaulters.size > 0 && (
+                          <span style={{ fontSize: '10px', fontWeight: '600', padding: '2px 8px', borderRadius: '100px', backgroundColor: '#FEE2E2', color: '#DC2626' }}>
+                            {homeworkDefaulters.size} defaulter{homeworkDefaulters.size > 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
+                      {defaultersExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
+                    </button>
 
-                  {defaultersExpanded && (
-                    <div style={{ borderTop: '1px solid var(--border-color)', padding: '12px 16px' }}>
-                      {presentStudents.length === 0 ? (
-                        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center', padding: '12px 0' }}>
-                          No present students. Mark attendance first.
-                        </p>
-                      ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '240px', overflowY: 'auto' }}>
-                          {presentStudents.map(student => (
-                            <label
-                              key={student.enrollmentId}
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '10px',
-                                padding: '8px 10px',
-                                borderRadius: 'var(--radius-sm)',
-                                cursor: 'pointer',
-                                backgroundColor: homeworkDefaulters.has(student.enrollmentId) ? '#FEF2F2' : 'transparent',
-                                border: '1px solid',
-                                borderColor: homeworkDefaulters.has(student.enrollmentId) ? '#FEE2E2' : 'transparent',
-                                transition: 'all 0.1s'
-                              }}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={homeworkDefaulters.has(student.enrollmentId)}
-                                onChange={() => handleToggleDefaulter(student.enrollmentId)}
-                                style={{ accentColor: '#EF4444', width: '15px', height: '15px' }}
-                              />
-                              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <span style={{ fontSize: '13px', fontWeight: homeworkDefaulters.has(student.enrollmentId) ? '600' : '500', color: homeworkDefaulters.has(student.enrollmentId) ? '#DC2626' : 'var(--text-primary)' }}>
-                                  {student.name}
-                                </span>
-                                <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{student.studentCode}</span>
-                              </div>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                    {defaultersExpanded && (
+                      <div style={{ borderTop: '1px solid var(--border-color)', padding: '12px 16px' }}>
+                        {presentStudents.length === 0 ? (
+                          <p style={{ fontSize: '13px', color: 'var(--text-secondary)', textAlign: 'center', padding: '12px 0' }}>
+                            No present students. Mark attendance first.
+                          </p>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '240px', overflowY: 'auto' }}>
+                            {presentStudents.map(student => (
+                              <label
+                                key={student.enrollmentId}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '10px',
+                                  padding: '8px 10px',
+                                  borderRadius: 'var(--radius-sm)',
+                                  cursor: 'pointer',
+                                  backgroundColor: homeworkDefaulters.has(student.enrollmentId) ? '#FEF2F2' : 'transparent',
+                                  border: '1px solid',
+                                  borderColor: homeworkDefaulters.has(student.enrollmentId) ? '#FEE2E2' : 'transparent',
+                                  transition: 'all 0.1s'
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={homeworkDefaulters.has(student.enrollmentId)}
+                                  onChange={() => handleToggleDefaulter(student.enrollmentId)}
+                                  style={{ accentColor: '#EF4444', width: '15px', height: '15px' }}
+                                />
+                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                  <span style={{ fontSize: '13px', fontWeight: homeworkDefaulters.has(student.enrollmentId) ? '600' : '500', color: homeworkDefaulters.has(student.enrollmentId) ? '#DC2626' : 'var(--text-primary)' }}>
+                                    {student.name}
+                                  </span>
+                                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{student.studentCode}</span>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Faculty Notes */}
                 <div className="form-group" style={{ margin: 0 }}>

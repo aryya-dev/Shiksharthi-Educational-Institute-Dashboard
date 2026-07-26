@@ -43,6 +43,101 @@ const getPackageTypeFromBatchName = (batchName: string, fallback: string) => {
   return fallback;
 };
 
+// Returns the mandatory core subjects for a given package type
+const getMandatorySubjects = (packageType: string): string[] => {
+  if (packageType === 'JEE') return ['Physics', 'Chemistry', 'Mathematics'];
+  if (packageType === 'NEET') return ['Physics', 'Chemistry', 'Biology'];
+  return [];
+};
+
+// Ensures mandatory core subjects are present and auto-switches subject names (e.g. Physics -> Physics (Board)) based on packageType
+const withMandatorySubjects = (subjects: string[], packageType: string): string[] => {
+  let rawList = [...subjects];
+  let expanded: string[] = [];
+
+  rawList.forEach(s => {
+    if (!s) return;
+    const clean = s.trim();
+    const norm = clean.toLowerCase();
+
+    if (packageType === 'Boards') {
+      if (norm === 'pc') {
+        expanded.push('Physics (Board)', 'Chemistry (Board)');
+      } else if (norm === 'pm') {
+        expanded.push('Physics (Board)', 'Mathematics (Board)');
+      } else if (norm === 'pb') {
+        expanded.push('Physics (Board)', 'Biology (Board)');
+      } else if (norm === 'cb') {
+        expanded.push('Chemistry (Board)', 'Biology (Board)');
+      } else if (norm === 'mb') {
+        expanded.push('Mathematics (Board)', 'Biology (Board)');
+      } else if (norm === 'pcm') {
+        expanded.push('Physics (Board)', 'Chemistry (Board)', 'Mathematics (Board)');
+      } else if (norm === 'pcb') {
+        expanded.push('Physics (Board)', 'Chemistry (Board)', 'Biology (Board)');
+      } else if (norm === 'pcmb') {
+        expanded.push('Physics (Board)', 'Chemistry (Board)', 'Mathematics (Board)', 'Biology (Board)');
+      } else if (clean === 'Physics' || clean === 'Physics (JEE)') {
+        expanded.push('Physics (Board)');
+      } else if (clean === 'Chemistry' || clean === 'Chemistry (JEE)') {
+        expanded.push('Chemistry (Board)');
+      } else if (clean === 'Mathematics' || clean === 'Maths' || clean === 'Mathematics (JEE)') {
+        expanded.push('Mathematics (Board)');
+      } else if (clean === 'Biology' || clean === 'Biology (NEET)') {
+        expanded.push('Biology (Board)');
+      } else {
+        expanded.push(clean);
+      }
+    } else if (packageType === 'JEE') {
+      if (norm === 'pc') {
+        expanded.push('Physics', 'Chemistry');
+      } else if (norm === 'pm') {
+        expanded.push('Physics', 'Mathematics');
+      } else if (norm === 'pcm') {
+        expanded.push('Physics', 'Chemistry', 'Mathematics');
+      } else if (clean === 'Physics (Board)') {
+        expanded.push('Physics');
+      } else if (clean === 'Chemistry (Board)') {
+        expanded.push('Chemistry');
+      } else if (clean === 'Mathematics (Board)' || clean === 'Mathematics (NEET)') {
+        expanded.push('Mathematics');
+      } else {
+        expanded.push(clean);
+      }
+    } else if (packageType === 'NEET') {
+      if (norm === 'pc') {
+        expanded.push('Physics', 'Chemistry');
+      } else if (norm === 'pb') {
+        expanded.push('Physics', 'Biology');
+      } else if (norm === 'cb') {
+        expanded.push('Chemistry', 'Biology');
+      } else if (norm === 'pcb') {
+        expanded.push('Physics', 'Chemistry', 'Biology');
+      } else if (clean === 'Physics (Board)') {
+        expanded.push('Physics');
+      } else if (clean === 'Chemistry (Board)') {
+        expanded.push('Chemistry');
+      } else if (clean === 'Biology (Board)') {
+        expanded.push('Biology');
+      } else {
+        expanded.push(clean);
+      }
+    } else {
+      expanded.push(clean);
+    }
+  });
+
+  if (packageType === 'JEE') {
+    const mandatory = ['Physics', 'Chemistry', 'Mathematics'];
+    mandatory.forEach(m => { if (!expanded.includes(m)) expanded.unshift(m); });
+  } else if (packageType === 'NEET') {
+    const mandatory = ['Physics', 'Chemistry', 'Biology'];
+    mandatory.forEach(m => { if (!expanded.includes(m)) expanded.unshift(m); });
+  }
+
+  return Array.from(new Set(expanded));
+};
+
 interface StudentListItem {
   id: string; // enrollment id
   studentId: string;
@@ -499,7 +594,7 @@ export default function StudentsPage() {
           batch_id: item.batch_id || item.batches?.id || '',
           batch_name: item.batches?.name || 'Unassigned',
           package_type: item.package_type || 'Boards',
-          subjects_taken: item.subjects_taken || [],
+          subjects_taken: withMandatorySubjects(item.subjects_taken || [], item.package_type || 'Boards'),
           status: item.status,
           admission_date: item.students?.admission_date || '',
           school: item.students?.school || '',
@@ -626,7 +721,7 @@ export default function StudentsPage() {
           board: newStudent.board || null,
           batch_id: selectedBatchId,
           package_type: newStudent.packageType,
-          subjects_taken: newStudent.subjects,
+          subjects_taken: withMandatorySubjects(newStudent.subjects, newStudent.packageType),
           status: 'Active',
           status_effective_date: new Date().toISOString().split('T')[0]
         })
@@ -644,7 +739,7 @@ export default function StudentsPage() {
             class: newStudent.classVal,
             batch_id: selectedBatchId,
             package_type: newStudent.packageType,
-            subjects_taken: newStudent.subjects,
+            subjects_taken: withMandatorySubjects(newStudent.subjects, newStudent.packageType),
             status: 'Active',
             status_effective_date: new Date().toISOString().split('T')[0]
           })
@@ -774,7 +869,7 @@ export default function StudentsPage() {
 
     const parts = norm.split(/[+,]/).map(p => p.trim()).filter(Boolean);
     
-    // Check if they used shorthand like PCM / PCB / PCMB
+    // Check if they used shorthand like PCM / PCB / PCMB / PM / PC / PB / CB / MB
     if (norm === 'pcm') {
       return ['Physics (Board)', 'Chemistry (Board)', 'Mathematics (Board)'];
     }
@@ -784,9 +879,39 @@ export default function StudentsPage() {
     if (norm === 'pcmb') {
       return ['Physics (Board)', 'Chemistry (Board)', 'Mathematics (Board)', 'Biology (Board)'];
     }
+    if (norm === 'pm') {
+      return ['Physics (Board)', 'Mathematics (Board)'];
+    }
+    if (norm === 'pc') {
+      return ['Physics (Board)', 'Chemistry (Board)'];
+    }
+    if (norm === 'pb') {
+      return ['Physics (Board)', 'Biology (Board)'];
+    }
+    if (norm === 'cb') {
+      return ['Chemistry (Board)', 'Biology (Board)'];
+    }
+    if (norm === 'mb') {
+      return ['Mathematics (Board)', 'Biology (Board)'];
+    }
 
     parts.forEach(part => {
-      if (part.startsWith('phy') || part === 'p') {
+      if (part === 'pm') {
+        subjects.add('Physics (Board)');
+        subjects.add('Mathematics (Board)');
+      } else if (part === 'pc') {
+        subjects.add('Physics (Board)');
+        subjects.add('Chemistry (Board)');
+      } else if (part === 'pb') {
+        subjects.add('Physics (Board)');
+        subjects.add('Biology (Board)');
+      } else if (part === 'cb') {
+        subjects.add('Chemistry (Board)');
+        subjects.add('Biology (Board)');
+      } else if (part === 'mb') {
+        subjects.add('Mathematics (Board)');
+        subjects.add('Biology (Board)');
+      } else if (part.startsWith('phy') || part === 'p') {
         subjects.add('Physics (Board)');
       } else if (part.startsWith('chem') || part === 'c') {
         subjects.add('Chemistry (Board)');
@@ -1055,7 +1180,7 @@ export default function StudentsPage() {
             board: row.board || null,
             batch_id: row.resolvedBatchId,
             package_type: row.resolvedPackageType,
-            subjects_taken: row.resolvedSubjects,
+            subjects_taken: withMandatorySubjects(row.resolvedSubjects, row.resolvedPackageType),
             status: row.resolvedStatus,
             status_effective_date: new Date().toISOString().split('T')[0]
           })
@@ -1073,7 +1198,7 @@ export default function StudentsPage() {
               class: row.classVal,
               batch_id: row.resolvedBatchId,
               package_type: row.resolvedPackageType,
-              subjects_taken: row.resolvedSubjects,
+              subjects_taken: withMandatorySubjects(row.resolvedSubjects, row.resolvedPackageType),
               status: row.resolvedStatus,
               status_effective_date: new Date().toISOString().split('T')[0]
             })
@@ -1107,7 +1232,7 @@ export default function StudentsPage() {
           batch_id: row.resolvedBatchId || '',
           batch_name: row.batchName,
           package_type: row.resolvedPackageType,
-          subjects_taken: row.resolvedSubjects,
+          subjects_taken: withMandatorySubjects(row.resolvedSubjects, row.resolvedPackageType),
           status: row.resolvedStatus,
           admission_date: studentData.admission_date,
           school: row.school,
@@ -2054,7 +2179,9 @@ export default function StudentsPage() {
     onUpdate: (updatedStudent: StudentListItem) => void;
   }) {
     const supabase = createClient();
-    const { currentBranch, currentAcademicYear } = useAppStore();
+    const { currentBranch, currentAcademicYear, userProfile } = useAppStore();
+    const isDirector = userProfile?.role === 'Director';
+    const [deletingSubject, setDeletingSubject] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'info' | 'academic' | 'billing'>('info');
 
     const [loading, setLoading] = useState(true);
@@ -2083,7 +2210,8 @@ export default function StudentsPage() {
       gender: student.gender || 'Male',
       school: student.school || '',
       address: student.address || '',
-      subjects: student.subjects_taken || [],
+      // Always ensure mandatory core subjects are present even if DB has empty array
+      subjects: withMandatorySubjects(student.subjects_taken || [], student.package_type || 'Boards'),
       batchId: student.batch_id || '',
       board: student.board || ''
     });
@@ -2092,6 +2220,7 @@ export default function StudentsPage() {
 
     // Sync editState when student prop updates
     useEffect(() => {
+      const pkg = student.package_type || 'Boards';
       setEditState({
         name: student.name,
         parentName: student.parent_name || '',
@@ -2099,11 +2228,54 @@ export default function StudentsPage() {
         gender: student.gender || 'Male',
         school: student.school || '',
         address: student.address || '',
-        subjects: student.subjects_taken || [],
+        // Always ensure mandatory core subjects are present even if DB has empty array
+        subjects: withMandatorySubjects(student.subjects_taken || [], pkg),
         batchId: student.batch_id || '',
         board: student.board || ''
       });
     }, [student]);
+
+    const handleRemoveSubjectDirectly = async (subjectToRemove: string) => {
+      if (!confirm(`Are you sure you want to remove "${subjectToRemove}" from ${student.name}'s subjects?`)) {
+        return;
+      }
+      setDeletingSubject(subjectToRemove);
+      try {
+        const currentSubjects = student.subjects_taken || [];
+        const updatedSubjects = currentSubjects.filter(s => s !== subjectToRemove);
+
+        let eErr;
+        const { error: eErrWithBoard } = await supabase
+          .from('enrollments')
+          .update({ subjects_taken: updatedSubjects })
+          .eq('id', student.id);
+
+        if (eErrWithBoard) {
+          const { error: eErrWithoutBoard } = await supabase
+            .from('enrollments')
+            .update({ subjects_taken: updatedSubjects })
+            .eq('id', student.id);
+          if (eErrWithoutBoard) eErr = eErrWithoutBoard;
+        }
+
+        if (eErr) throw eErr;
+
+        setEditState(prev => ({
+          ...prev,
+          subjects: prev.subjects.filter(s => s !== subjectToRemove)
+        }));
+
+        onUpdate({
+          ...student,
+          subjects_taken: updatedSubjects
+        });
+      } catch (err: any) {
+        console.error('Failed to remove subject:', err);
+        alert(`Failed to remove subject: ${err?.message || 'Unknown error'}`);
+      } finally {
+        setDeletingSubject(null);
+      }
+    };
 
     // Load available batches for the student's class
     useEffect(() => {
@@ -2206,12 +2378,15 @@ export default function StudentsPage() {
 
         // Update enrollment table for subjects, batch, package, and board (try with board, fallback if not available)
         let eErr;
+        // Always include mandatory core subjects before saving
+        const finalSubjects = withMandatorySubjects(editState.subjects, newPackage);
+
         const { error: eErrWithBoard } = await supabase
           .from('enrollments')
           .update({
             batch_id: editState.batchId,
             package_type: newPackage,
-            subjects_taken: editState.subjects,
+            subjects_taken: finalSubjects,
             board: editState.board || null
           })
           .eq('id', student.id);
@@ -2223,7 +2398,7 @@ export default function StudentsPage() {
             .update({
               batch_id: editState.batchId,
               package_type: newPackage,
-              subjects_taken: editState.subjects
+              subjects_taken: finalSubjects
             })
             .eq('id', student.id);
           
@@ -2242,7 +2417,7 @@ export default function StudentsPage() {
           gender: editState.gender,
           school: editState.school,
           address: editState.address,
-          subjects_taken: editState.subjects,
+          subjects_taken: finalSubjects,
           batch_id: editState.batchId,
           batch_name: newBatchName,
           package_type: newPackage,
@@ -2292,13 +2467,13 @@ export default function StudentsPage() {
         let newSubjects: string[] = student.subjects_taken || [];
         if (nameLower.includes('jee')) {
           newPackage = 'JEE';
-          newSubjects = ['Physics', 'Chemistry', 'Mathematics'];
+          newSubjects = withMandatorySubjects(student.subjects_taken || [], 'JEE');
         } else if (nameLower.includes('neet')) {
           newPackage = 'NEET';
-          newSubjects = ['Physics', 'Chemistry', 'Biology'];
+          newSubjects = withMandatorySubjects(student.subjects_taken || [], 'NEET');
         } else if (nameLower.includes('board')) {
           newPackage = 'Boards';
-          newSubjects = ['Physics (Board)', 'Chemistry (Board)', 'Mathematics (Board)', 'Biology (Board)', 'Computer Science'];
+          newSubjects = withMandatorySubjects(student.subjects_taken && student.subjects_taken.length > 0 ? student.subjects_taken : ['Physics', 'Chemistry', 'Mathematics', 'Biology'], 'Boards');
         }
 
         const { error } = await supabase
@@ -2871,7 +3046,10 @@ export default function StudentsPage() {
                         );
                       } else {
                         // Boards
-                        const subjects = ['Physics (Board)', 'Chemistry (Board)', 'Mathematics (Board)', 'Biology (Board)', 'Computer Science', ...extraSubjects7to10];
+                        const standardSubjects = ['Physics (Board)', 'Chemistry (Board)', 'Mathematics (Board)', 'Biology (Board)', 'Computer Science', ...extraSubjects7to10];
+                        // Include custom/unlisted subjects so they can be toggled/removed in edit mode
+                        const customSubjects = editState.subjects.filter(s => !standardSubjects.includes(s));
+                        const subjects = [...standardSubjects, ...customSubjects];
                         return (
                           <>
                             {subjects.map(s => {
@@ -2974,11 +3152,54 @@ export default function StudentsPage() {
 
                 <div>
                   <span className="caption">Subjects Taken</span>
-                  <p style={{ fontWeight: '500', marginTop: '4px' }}>
-                    {student.subjects_taken && student.subjects_taken.length > 0
-                      ? student.subjects_taken.join(', ')
-                      : 'No custom subjects registered'}
-                  </p>
+                  {student.subjects_taken && student.subjects_taken.length > 0 ? (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px', alignItems: 'center' }}>
+                      {student.subjects_taken.map((sub) => (
+                        <span
+                          key={sub}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            backgroundColor: 'var(--surface-secondary)',
+                            border: '1px solid var(--border-color)',
+                            padding: '4px 10px',
+                            borderRadius: '16px',
+                            fontSize: '13px',
+                            fontWeight: 500,
+                            color: 'var(--text-primary)'
+                          }}
+                        >
+                          <span>{sub}</span>
+                          {isDirector && (
+                            <button
+                              type="button"
+                              title={`Remove ${sub} directly from database`}
+                              disabled={deletingSubject === sub}
+                              onClick={() => handleRemoveSubjectDirectly(sub)}
+                              style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: '#EF4444',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: '2px',
+                                borderRadius: '50%',
+                                lineHeight: 1,
+                                opacity: deletingSubject === sub ? 0.5 : 1
+                              }}
+                            >
+                              <X size={14} />
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ fontWeight: '500', marginTop: '4px', color: 'var(--text-tertiary)' }}>No custom subjects registered</p>
+                  )}
                 </div>
 
                 <div>

@@ -47,6 +47,7 @@ interface ClassReport {
   homework_defaulter_list: string[];
   academic_year_id: string;
   branch_id: string;
+  is_exam?: boolean;
   created_at: string;
 }
 
@@ -212,9 +213,13 @@ export default function ClassReportsPage() {
       
       tableColHeaderBlue: { width: '25%', backgroundColor: '#8DB4E2', padding: 6, justifyContent: 'center', alignItems: 'center', borderRightWidth: 1, borderRightColor: '#000000' },
       tableColHeaderBlueLast: { width: '25%', backgroundColor: '#8DB4E2', padding: 6, justifyContent: 'center', alignItems: 'center' },
+      tableColHeader2Blue: { width: '50%', backgroundColor: '#8DB4E2', padding: 6, justifyContent: 'center', alignItems: 'center', borderRightWidth: 1, borderRightColor: '#000000' },
+      tableColHeader2BlueLast: { width: '50%', backgroundColor: '#8DB4E2', padding: 6, justifyContent: 'center', alignItems: 'center' },
       
       tableCellContent: { width: '25%', padding: 8, justifyContent: 'flex-start', alignItems: 'stretch', borderRightWidth: 1, borderRightColor: '#000000', minHeight: 80 },
       tableCellContentLast: { width: '25%', padding: 8, justifyContent: 'flex-start', alignItems: 'stretch', minHeight: 80 },
+      tableCellContent2: { width: '50%', padding: 8, justifyContent: 'flex-start', alignItems: 'stretch', borderRightWidth: 1, borderRightColor: '#000000', minHeight: 80 },
+      tableCellContent2Last: { width: '50%', padding: 8, justifyContent: 'flex-start', alignItems: 'stretch', minHeight: 80 },
       
       textBold: { fontFamily: 'Helvetica-Bold', fontSize: 10, color: '#000000', textAlign: 'center' },
       textNormal: { fontSize: 9, color: '#000000', lineHeight: 1.2 },
@@ -290,67 +295,98 @@ export default function ClassReportsPage() {
             </View>
             
             {/* Row 3 */}
-            <View style={styles.tableRow}>
-              <View style={styles.tableColHeaderBlue}>
-                <Text style={styles.textBold}>Absentee List</Text>
+            {report.is_exam ? (
+              <View style={styles.tableRow}>
+                <View style={styles.tableColHeader2Blue}>
+                  <Text style={styles.textBold}>Exam Defaulters</Text>
+                </View>
+                <View style={styles.tableColHeader2BlueLast}>
+                  <Text style={styles.textBold}>Chapter Name</Text>
+                </View>
               </View>
-              <View style={styles.tableColHeaderBlue}>
-                <Text style={styles.textBold}>Homework Defaulters</Text>
+            ) : (
+              <View style={styles.tableRow}>
+                <View style={styles.tableColHeaderBlue}>
+                  <Text style={styles.textBold}>Absentee List</Text>
+                </View>
+                <View style={styles.tableColHeaderBlue}>
+                  <Text style={styles.textBold}>Homework Defaulters</Text>
+                </View>
+                <View style={styles.tableColHeaderBlue}>
+                  <Text style={styles.textBold}>Chapter Name</Text>
+                </View>
+                <View style={styles.tableColHeaderBlueLast}>
+                  <Text style={styles.textBold}>HW</Text>
+                </View>
               </View>
-              <View style={styles.tableColHeaderBlue}>
-                <Text style={styles.textBold}>Chapter Name</Text>
-              </View>
-              <View style={styles.tableColHeaderBlueLast}>
-                <Text style={styles.textBold}>HW</Text>
-              </View>
-            </View>
+            )}
             
             {/* Row 4 */}
-            <View style={styles.tableRowLast}>
-              {/* Absentee Column */}
-              <View style={styles.tableCellContent}>
-                {report.absentee_list && report.absentee_list.length > 0 ? (
-                  report.absentee_list.map((name: string, idx: number) => (
-                    <Text key={idx} style={styles.textRedBold}>{name}</Text>
-                  ))
-                ) : (
-                  <Text style={styles.textMuted}>None</Text>
-                )}
+            {report.is_exam ? (
+              <View style={styles.tableRowLast}>
+                {/* Exam Defaulters (Absentees) Column */}
+                <View style={styles.tableCellContent2}>
+                  {report.absentee_list && report.absentee_list.length > 0 ? (
+                    report.absentee_list.map((name: string, idx: number) => (
+                      <Text key={idx} style={styles.textRedBold}>{name}</Text>
+                    ))
+                  ) : (
+                    <Text style={styles.textMuted}>None</Text>
+                  )}
+                </View>
+                
+                {/* Chapter Column */}
+                <View style={styles.tableCellContent2Last}>
+                  <Text style={styles.textNormal}>{report.chapter_covered}</Text>
+                </View>
               </View>
-              
-              {/* Defaulter Column */}
-              <View style={styles.tableCellContent}>
-                {report.homework_defaulter_list && report.homework_defaulter_list.length > 0 ? (
-                  report.homework_defaulter_list.map((name: string, idx: number) => (
-                    <Text key={idx} style={styles.textNormal}>{name}</Text>
-                  ))
-                ) : (
-                  <Text style={styles.textNormal}>NULL</Text>
-                )}
+            ) : (
+              <View style={styles.tableRowLast}>
+                {/* Absentee Column */}
+                <View style={styles.tableCellContent}>
+                  {report.absentee_list && report.absentee_list.length > 0 ? (
+                    report.absentee_list.map((name: string, idx: number) => (
+                      <Text key={idx} style={styles.textRedBold}>{name}</Text>
+                    ))
+                  ) : (
+                    <Text style={styles.textMuted}>None</Text>
+                  )}
+                </View>
+                
+                {/* Defaulter Column */}
+                <View style={styles.tableCellContent}>
+                  {report.homework_defaulter_list && report.homework_defaulter_list.length > 0 ? (
+                    report.homework_defaulter_list.map((name: string, idx: number) => (
+                      <Text key={idx} style={styles.textNormal}>{name}</Text>
+                    ))
+                  ) : (
+                    <Text style={styles.textNormal}>NULL</Text>
+                  )}
+                </View>
+                
+                {/* Chapter Column */}
+                <View style={styles.tableCellContent}>
+                  <Text style={styles.textNormal}>{report.chapter_covered}</Text>
+                </View>
+                
+                {/* Homework Column */}
+                <View style={styles.tableCellContentLast}>
+                  {report.homework_title ? (
+                    <View>
+                      <Text style={styles.textBlackBold}>{report.homework_title}</Text>
+                      {report.homework_description && (
+                        <Text style={[styles.textNormal, { marginBottom: 4 }]}>{report.homework_description}</Text>
+                      )}
+                      {report.homework_due_date && (
+                        <Text style={[styles.textNormal, { fontFamily: 'Helvetica-Bold', color: '#1D4ED8' }]}>Due: {formatDateDDMMYYYY(report.homework_due_date)}</Text>
+                      )}
+                    </View>
+                  ) : (
+                    <Text style={styles.textNormal}>Not Assigned</Text>
+                  )}
+                </View>
               </View>
-              
-              {/* Chapter Column */}
-              <View style={styles.tableCellContent}>
-                <Text style={styles.textNormal}>{report.chapter_covered}</Text>
-              </View>
-              
-              {/* Homework Column */}
-              <View style={styles.tableCellContentLast}>
-                {report.homework_title ? (
-                  <View>
-                    <Text style={styles.textBlackBold}>{report.homework_title}</Text>
-                    {report.homework_description && (
-                      <Text style={[styles.textNormal, { marginBottom: 4 }]}>{report.homework_description}</Text>
-                    )}
-                    {report.homework_due_date && (
-                      <Text style={[styles.textNormal, { fontFamily: 'Helvetica-Bold', color: '#1D4ED8' }]}>Due: {formatDateDDMMYYYY(report.homework_due_date)}</Text>
-                    )}
-                  </View>
-                ) : (
-                  <Text style={styles.textNormal}>Not Assigned</Text>
-                )}
-              </View>
-            </View>
+            )}
           </View>
           
           <Text style={styles.footer}>
