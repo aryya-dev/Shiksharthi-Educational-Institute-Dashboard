@@ -433,7 +433,7 @@ export default function ExamsPage() {
         setResults(updatedWithIds);
         // Mark this exam as having results so the red dot disappears
         if (selectedExam) {
-          setExamsWithResults(prev => new Set([...prev, selectedExam.id]));
+          setExamsWithResults(prev => new Set(Array.from(prev).concat(selectedExam.id)));
         }
       } else {
         // If everything was deleted or none was upserted
