@@ -358,7 +358,7 @@ export default function DashboardPage() {
           feesDue: feesDueStr,
           pendingAttendance: activeClasses.filter(c => c.status === 'Completed').length,
           upcomingExams: examCount || 0,
-          lowAttendance: lowAttendanceCount
+          lowAttendance: lowAttendanceCount || 0
         });
       } catch (err) {
         console.error(err);
