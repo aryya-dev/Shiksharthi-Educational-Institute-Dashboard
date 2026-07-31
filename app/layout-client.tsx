@@ -48,7 +48,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
 
   const isLogin = pathname === '/login';
 
-  // Fetch initial profile, branches, and academic years
+  // Fetch initial profile, branches, and academic years — only once per session
   useEffect(() => {
     async function initApp() {
       if (isLogin) {
@@ -56,7 +56,13 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
         return;
       }
 
-
+      // If we already have the user profile loaded (e.g. navigating between pages),
+      // skip re-fetching to make navigation instant.
+      const existingProfile = useAppStore.getState().userProfile;
+      if (existingProfile) {
+        setLoading(false);
+        return;
+      }
 
       // ── Normal Supabase Flow ──
       const { data: { user } } = await supabase.auth.getUser();
@@ -79,8 +85,11 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
 
       setUserProfile(profile);
 
-      const { data: branchesData } = await supabase.from('branches').select('*');
-      const { data: yearsData } = await supabase.from('academic_years').select('*');
+      // Fetch branches and years in parallel
+      const [{ data: branchesData }, { data: yearsData }] = await Promise.all([
+        supabase.from('branches').select('*'),
+        supabase.from('academic_years').select('*'),
+      ]);
 
       const allBranches = (branchesData || []) as Branch[];
       const allYears = (yearsData || []) as AcademicYear[];
@@ -96,7 +105,7 @@ export default function LayoutClient({ children }: { children: React.ReactNode }
           .from('profile_branches')
           .select('branch_id')
           .eq('profile_id', profile.id);
-        const branchIds = mappedBranches?.map(mb => mb.branch_id) || [];
+        const branchIds = mappedBranches?.map((mb: any) => mb.branch_id) || [];
         allowedBranches = allBranches.filter(b => branchIds.includes(b.id));
       }
 

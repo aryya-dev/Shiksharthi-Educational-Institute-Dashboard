@@ -11,10 +11,36 @@ import {
   ShieldAlert,
   CheckCircle,
   ToggleLeft,
-  BookOpen
+  BookOpen,
+  AlertTriangle,
+  GraduationCap,
+  TrendingUp,
+  ArrowRight,
+  RefreshCw,
+  Pencil
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { createClient } from '@/utils/supabase/client';
+
+interface RolloverPreview {
+  old_year: string;
+  new_year: string;
+  promoted_count: number;
+  promoted_names: string[];
+  graduated_count: number;
+  graduated_names: string[];
+  batches_to_clone: number;
+}
+
+interface RolloverResult {
+  success: boolean;
+  old_year: string;
+  new_year: string;
+  promoted_count: number;
+  graduated_count: number;
+  batches_cloned: number;
+  errors: any[];
+}
 
 interface AccountItem {
   id: string;
@@ -65,6 +91,15 @@ export default function SettingsPage() {
   // Faculty form state
   const [showAddFacultyModal, setShowAddFacultyModal] = useState(false);
   const [newFaculty, setNewFaculty] = useState({ name: '', email: '', subjects: '', selectedBranches: [] as string[] });
+
+  // Rollover wizard state
+  const [rolloverStep, setRolloverStep] = useState<'idle' | 'preview' | 'confirm' | 'done'>('idle');
+  const [rolloverTargetYearId, setRolloverTargetYearId] = useState<string | null>(null);
+  const [rolloverPreview, setRolloverPreview] = useState<RolloverPreview | null>(null);
+  const [rolloverLoading, setRolloverLoading] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const [rolloverResult, setRolloverResult] = useState<RolloverResult | null>(null);
+  const [rolloverError, setRolloverError] = useState<string | null>(null);
 
   const isDirector = userProfile?.role === 'Director';
 
@@ -169,13 +204,42 @@ export default function SettingsPage() {
     }
   };
 
-  // Handle toggle year rollover
-  const handleRolloverYear = (yearId: string) => {
-    setYears(years.map(y => ({
-      ...y,
-      isCurrent: y.id === yearId
-    })));
-    setSuccessMsg(`Success! Calendar system has rolled over to selected academic session.`);
+  // Rollover wizard: Step 1 — load preview
+  const handlePreviewRollover = async (yearId: string) => {
+    setRolloverTargetYearId(yearId);
+    setRolloverError(null);
+    setRolloverLoading(true);
+    setRolloverStep('preview');
+    try {
+      const { data, error } = await supabase.rpc('preview_rollover', { p_new_year_id: yearId });
+      if (error) throw error;
+      setRolloverPreview(data as RolloverPreview);
+    } catch (err: any) {
+      setRolloverError(err.message || 'Failed to load rollover preview.');
+    } finally {
+      setRolloverLoading(false);
+    }
+  };
+
+  // Rollover wizard: Step 3 — execute
+  const handleExecuteRollover = async () => {
+    if (!rolloverTargetYearId) return;
+    setRolloverError(null);
+    setRolloverLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('rollover_academic_year', { p_new_year_id: rolloverTargetYearId });
+      if (error) throw error;
+      const result = data as RolloverResult;
+      setRolloverResult(result);
+      // Update local years state to reflect new current year
+      setYears(years.map(y => ({ ...y, isCurrent: y.id === rolloverTargetYearId })));
+      setRolloverStep('done');
+    } catch (err: any) {
+      setRolloverError(err.message || 'Rollover failed. Please try again.');
+    } finally {
+      setRolloverLoading(false);
+      setConfirmText('');
+    }
   };
 
   // Handle Add Faculty
@@ -426,52 +490,243 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* TAB 3: Academic Roll over indicators */}
+        {/* TAB 3: Academic Rollover Wizard */}
         {activeTab === 'rollover' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div className="card" style={{ margin: 0, padding: '20px', borderLeft: '4px solid var(--primary-orange)' }}>
-              <h3 style={{ fontSize: '16px', marginBottom: '8px' }}>Active Session Rollover</h3>
-              <p className="secondary-text" style={{ fontSize: '13px' }}>
-                Flipping the active academic session shifts default dashboard calendars, query filters, and installment collections. Historical records are archived automatically without overwriting.
-              </p>
+
+            {/* Info card */}
+            <div className="card" style={{ margin: 0, padding: '20px', borderLeft: '4px solid var(--primary-orange)', display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+              <RefreshCw size={28} style={{ color: 'var(--primary-orange)', flexShrink: 0, marginTop: '2px' }} />
+              <div>
+                <h3 style={{ fontSize: '16px', marginBottom: '6px' }}>Academic Year Rollover</h3>
+                <p className="secondary-text" style={{ fontSize: '13px', lineHeight: '1.5' }}>
+                  Rolling over an academic session will <strong>promote all active Class 11 students to Class 12</strong>,
+                  <strong> graduate and archive all Class 12 students</strong>, and
+                  <strong> auto-clone Class 11 batches</strong> (renamed to Class 12) under the new year.
+                  You can edit batch assignments for promoted students afterwards.
+                </p>
+              </div>
             </div>
 
-            <div className="table-container">
-              <table className="table" style={{ fontSize: '13px' }}>
-                <thead>
-                  <tr>
-                    <th>Session Year</th>
-                    <th>Active Status</th>
-                    <th>Toggle Activation</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {years.map(y => (
-                    <tr key={y.id}>
-                      <td style={{ fontWeight: '600' }}>{y.label}</td>
-                      <td>
-                        {y.isCurrent ? (
-                          <span className="badge badge-success">Active Session</span>
-                        ) : (
-                          <span className="badge badge-info" style={{ backgroundColor: '#EEF2F6', color: 'var(--text-disabled)' }}>Archived</span>
-                        )}
-                      </td>
-                      <td>
-                        <button
-                          className="btn btn-secondary"
-                          style={{ padding: '6px 12px', minHeight: '32px', fontSize: '12px', gap: '4px' }}
-                          disabled={y.isCurrent}
-                          onClick={() => handleRolloverYear(y.id)}
-                        >
-                          <ToggleLeft size={16} />
-                          <span>Activate</span>
-                        </button>
-                      </td>
+            {/* Error state */}
+            {rolloverError && (
+              <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-sm)', backgroundColor: '#FEF2F2', border: '1px solid #FCA5A5', color: '#DC2626', fontSize: '13px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <AlertTriangle size={16} />
+                <span>{rolloverError}</span>
+              </div>
+            )}
+
+            {/* Done Result card */}
+            {rolloverStep === 'done' && rolloverResult && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ padding: '20px', borderRadius: 'var(--radius-sm)', backgroundColor: '#F0FDF4', border: '1px solid #86EFAC' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                    <CheckCircle size={24} style={{ color: '#16A34A' }} />
+                    <h3 style={{ fontSize: '16px', color: '#15803D' }}>Rollover Complete — {rolloverResult.old_year} → {rolloverResult.new_year}</h3>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                    <div style={{ textAlign: 'center', padding: '12px', backgroundColor: '#fff', borderRadius: 'var(--radius-sm)', border: '1px solid #BBF7D0' }}>
+                      <div style={{ fontSize: '28px', fontWeight: '700', color: 'var(--primary-orange)' }}>{rolloverResult.promoted_count}</div>
+                      <div className="caption">Students Promoted</div>
+                      <div className="caption" style={{ color: '#16A34A' }}>Class 11 → 12</div>
+                    </div>
+                    <div style={{ textAlign: 'center', padding: '12px', backgroundColor: '#fff', borderRadius: 'var(--radius-sm)', border: '1px solid #BBF7D0' }}>
+                      <div style={{ fontSize: '28px', fontWeight: '700', color: '#7C3AED' }}>{rolloverResult.graduated_count}</div>
+                      <div className="caption">Students Graduated</div>
+                      <div className="caption" style={{ color: '#7C3AED' }}>Archived as Alumni</div>
+                    </div>
+                    <div style={{ textAlign: 'center', padding: '12px', backgroundColor: '#fff', borderRadius: 'var(--radius-sm)', border: '1px solid #BBF7D0' }}>
+                      <div style={{ fontSize: '28px', fontWeight: '700', color: '#0891B2' }}>{rolloverResult.batches_cloned}</div>
+                      <div className="caption">Batches Cloned</div>
+                      <div className="caption" style={{ color: '#0891B2' }}>Editable in Batches</div>
+                    </div>
+                  </div>
+                  {rolloverResult.errors && rolloverResult.errors.length > 0 && (
+                    <div style={{ marginTop: '12px', fontSize: '12px', color: '#DC2626' }}>
+                      ⚠ {rolloverResult.errors.length} error(s) occurred. Check console for details.
+                    </div>
+                  )}
+                </div>
+                <button
+                  className="btn btn-secondary"
+                  style={{ alignSelf: 'flex-start', gap: '8px' }}
+                  onClick={() => { setRolloverStep('idle'); setRolloverResult(null); setRolloverPreview(null); }}
+                >
+                  <RefreshCw size={16} />
+                  <span>Back to Year List</span>
+                </button>
+              </div>
+            )}
+
+            {/* Year selector table (idle state) */}
+            {rolloverStep === 'idle' && (
+              <div className="table-container">
+                <table className="table" style={{ fontSize: '13px' }}>
+                  <thead>
+                    <tr>
+                      <th>Session Year</th>
+                      <th>Status</th>
+                      <th>Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {years.map(y => (
+                      <tr key={y.id}>
+                        <td style={{ fontWeight: '600', fontSize: '15px' }}>{y.label}</td>
+                        <td>
+                          {y.isCurrent ? (
+                            <span className="badge badge-success">✓ Active Session</span>
+                          ) : (
+                            <span className="badge badge-info" style={{ backgroundColor: '#EEF2F6', color: 'var(--text-disabled)' }}>Archived</span>
+                          )}
+                        </td>
+                        <td>
+                          {y.isCurrent ? (
+                            <span className="caption" style={{ color: 'var(--text-disabled)' }}>Current session</span>
+                          ) : (
+                            <button
+                              className="btn btn-primary"
+                              style={{ padding: '6px 14px', minHeight: '32px', fontSize: '12px', gap: '6px' }}
+                              onClick={() => handlePreviewRollover(y.id)}
+                            >
+                              <ArrowRight size={14} />
+                              <span>Roll Over to {y.label}</span>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Preview step */}
+            {rolloverStep === 'preview' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {rolloverLoading ? (
+                  <div className="skeleton" style={{ height: '220px', borderRadius: 'var(--radius-sm)' }} />
+                ) : rolloverPreview && (
+                  <>
+                    <div style={{ padding: '20px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', backgroundColor: 'var(--surface-secondary)' }}>
+                      <h3 style={{ fontSize: '15px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <CalendarDays size={18} style={{ color: 'var(--primary-orange)' }} />
+                        Rollover Preview: {rolloverPreview.old_year} → {rolloverPreview.new_year}
+                      </h3>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '20px' }}>
+                        <div style={{ textAlign: 'center', padding: '16px', backgroundColor: 'var(--card-bg)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                          <TrendingUp size={24} style={{ color: 'var(--primary-orange)', marginBottom: '6px' }} />
+                          <div style={{ fontSize: '26px', fontWeight: '700', color: 'var(--primary-orange)' }}>{rolloverPreview.promoted_count}</div>
+                          <div className="caption">To be Promoted</div>
+                          <div className="caption" style={{ color: 'var(--primary-orange)', marginTop: '2px' }}>Class 11 → 12</div>
+                        </div>
+                        <div style={{ textAlign: 'center', padding: '16px', backgroundColor: 'var(--card-bg)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                          <GraduationCap size={24} style={{ color: '#7C3AED', marginBottom: '6px' }} />
+                          <div style={{ fontSize: '26px', fontWeight: '700', color: '#7C3AED' }}>{rolloverPreview.graduated_count}</div>
+                          <div className="caption">To be Graduated</div>
+                          <div className="caption" style={{ color: '#7C3AED', marginTop: '2px' }}>Archived as Alumni</div>
+                        </div>
+                        <div style={{ textAlign: 'center', padding: '16px', backgroundColor: 'var(--card-bg)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                          <Pencil size={24} style={{ color: '#0891B2', marginBottom: '6px' }} />
+                          <div style={{ fontSize: '26px', fontWeight: '700', color: '#0891B2' }}>{rolloverPreview.batches_to_clone}</div>
+                          <div className="caption">Batches to Clone</div>
+                          <div className="caption" style={{ color: '#0891B2', marginTop: '2px' }}>Editable after rollover</div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        <div>
+                          <p className="caption" style={{ marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Students to Promote (Class 11 → 12)</p>
+                          <div style={{ maxHeight: '120px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            {rolloverPreview.promoted_names.map((name, i) => (
+                              <div key={i} style={{ fontSize: '12px', padding: '3px 8px', backgroundColor: '#FFF7ED', color: 'var(--primary-orange)', borderRadius: '4px', border: '1px solid var(--light-orange)' }}>{name}</div>
+                            ))}
+                            {rolloverPreview.promoted_names.length === 0 && <span className="caption">None</span>}
+                          </div>
+                        </div>
+                        <div>
+                          <p className="caption" style={{ marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Students to Graduate (Class 12)</p>
+                          <div style={{ maxHeight: '120px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            {rolloverPreview.graduated_names.map((name, i) => (
+                              <div key={i} style={{ fontSize: '12px', padding: '3px 8px', backgroundColor: '#F5F3FF', color: '#7C3AED', borderRadius: '4px', border: '1px solid #DDD6FE' }}>{name}</div>
+                            ))}
+                            {rolloverPreview.graduated_names.length === 0 && <span className="caption">None</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                      <button
+                        className="btn btn-tertiary"
+                        onClick={() => { setRolloverStep('idle'); setRolloverPreview(null); }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="btn btn-primary"
+                        style={{ gap: '8px', backgroundColor: '#DC2626' }}
+                        onClick={() => setRolloverStep('confirm')}
+                      >
+                        <AlertTriangle size={16} />
+                        <span>Proceed to Confirm</span>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Confirm step */}
+            {rolloverStep === 'confirm' && rolloverPreview && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ padding: '24px', borderRadius: 'var(--radius-sm)', border: '2px solid #FCA5A5', backgroundColor: '#FEF2F2' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                    <AlertTriangle size={24} style={{ color: '#DC2626' }} />
+                    <h3 style={{ fontSize: '16px', color: '#DC2626' }}>This action is irreversible</h3>
+                  </div>
+                  <p style={{ fontSize: '13px', color: '#7F1D1D', lineHeight: '1.6', marginBottom: '16px' }}>
+                    You are about to roll over from <strong>{rolloverPreview.old_year}</strong> to <strong>{rolloverPreview.new_year}</strong>.
+                    This will promote <strong>{rolloverPreview.promoted_count} students</strong> to Class 12,
+                    graduate <strong>{rolloverPreview.graduated_count} students</strong> permanently,
+                    and clone <strong>{rolloverPreview.batches_to_clone} batches</strong>.
+                    <br /><br />
+                    Once executed, this cannot be undone. Type <strong>CONFIRM</strong> below to proceed.
+                  </p>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder='Type "CONFIRM" to enable rollover'
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    style={{ marginBottom: '16px', borderColor: '#FCA5A5' }}
+                  />
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <button
+                      className="btn btn-tertiary"
+                      onClick={() => { setRolloverStep('preview'); setConfirmText(''); }}
+                      disabled={rolloverLoading}
+                    >
+                      ← Back to Preview
+                    </button>
+                    <button
+                      className="btn btn-primary"
+                      style={{ gap: '8px', backgroundColor: confirmText === 'CONFIRM' ? '#DC2626' : undefined, opacity: confirmText === 'CONFIRM' ? 1 : 0.5 }}
+                      disabled={confirmText !== 'CONFIRM' || rolloverLoading}
+                      onClick={handleExecuteRollover}
+                    >
+                      {rolloverLoading ? (
+                        <><RefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} /><span>Running Rollover...</span></>
+                      ) : (
+                        <><CheckCircle size={16} /><span>Execute Year Rollover</span></>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 

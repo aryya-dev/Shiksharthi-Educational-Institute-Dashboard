@@ -71,19 +71,140 @@ export default function DashboardPage() {
       setLoading(true);
       
       try {
-        const { count: studentCount } = await supabase
-          .from('enrollments')
-          .select('*', { count: 'exact', head: true })
-          .eq('branch_id', currentBranch.id)
-          .eq('academic_year_id', currentAcademicYear.id)
-          .eq('status', 'Active');
+        const jsDay = new Date().getDay();
+        const dbDay = jsDay === 0 ? 7 : jsDay;
+        const todayDateStr = new Date().toISOString().split('T')[0];
 
-        const { data: bData } = await supabase
-          .from('batches')
-          .select('id, name')
-          .eq('branch_id', currentBranch.id)
-          .eq('academic_year_id', currentAcademicYear.id)
-          .order('name');
+        // Date 14 days ago for attendance & result alerts to avoid fetching full history
+        const fourteenDaysAgo = new Date();
+        fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
+        const fourteenDaysAgoStr = fourteenDaysAgo.toISOString().split('T')[0];
+
+        // Run all queries concurrently in parallel
+        const [
+          { count: studentCount },
+          { data: bData },
+          { data: todaySchedules },
+          unpaidRes,
+          { count: lowAttendanceCount },
+          { count: examCount },
+          { data: attData },
+          { data: resData }
+        ] = await Promise.all([
+          // 1. Active students count
+          supabase
+            .from('enrollments')
+            .select('*', { count: 'exact', head: true })
+            .eq('branch_id', currentBranch.id)
+            .eq('academic_year_id', currentAcademicYear.id)
+            .eq('status', 'Active'),
+
+          // 2. Batches list
+          supabase
+            .from('batches')
+            .select('id, name')
+            .eq('branch_id', currentBranch.id)
+            .eq('academic_year_id', currentAcademicYear.id)
+            .order('name'),
+
+          // 3. Today's schedules
+          supabase
+            .from('schedules')
+            .select('*, batches(name, class, branch_id), rooms(name), faculty(name)')
+            .eq('day_of_week', dbDay)
+            .eq('branch_id', currentBranch.id)
+            .eq('academic_year_id', currentAcademicYear.id),
+
+          // 4. Unpaid fee installments — filter by branch + academic year via join
+          isMentor
+            ? Promise.resolve({ data: [], count: null, error: null, status: 200, statusText: 'OK' })
+            : supabase
+                .from('fee_installments')
+                .select(`
+                  due_amount,
+                  student_fees!inner (
+                    enrollments!inner (
+                      branch_id,
+                      academic_year_id
+                    )
+                  )
+                `)
+                .in('status', ['Due', 'Overdue'])
+                .eq('student_fees.enrollments.branch_id', currentBranch.id)
+                .eq('student_fees.enrollments.academic_year_id', currentAcademicYear.id),
+
+          // 5. Low attendance count (<75%) — filter by branch at query level
+          supabase
+            .from('report_cards')
+            .select(`
+              attendance_percentage,
+              enrollments!inner (
+                branch_id
+              )
+            `, { count: 'exact', head: true })
+            .eq('academic_year_id', currentAcademicYear.id)
+            .eq('enrollments.branch_id', currentBranch.id)
+            .lt('attendance_percentage', 75),
+
+          // 6. Upcoming exams count
+          supabase
+            .from('exams')
+            .select('*', { count: 'exact', head: true })
+            .eq('branch_id', currentBranch.id)
+            .eq('academic_year_id', currentAcademicYear.id)
+            .gte('date', todayDateStr),
+
+          // 7. Recent attendance for alert detection (limit 100, last 30 days)
+          supabase
+            .from('attendance')
+            .select(`
+              status,
+              enrollment_id,
+              enrollments!inner(
+                id,
+                branch_id,
+                academic_year_id,
+                students(name, student_code),
+                batches(name)
+              ),
+              class_sessions!inner(
+                subject_name,
+                date
+              )
+            `)
+            .eq('enrollments.branch_id', currentBranch.id)
+            .eq('enrollments.academic_year_id', currentAcademicYear.id)
+            .gte('class_sessions.date', fourteenDaysAgoStr)
+            .order('created_at', { ascending: false })
+            .limit(100),
+
+          // 8. Recent exam results for alert detection (limit 100)
+          supabase
+            .from('results')
+            .select(`
+              marks_obtained,
+              percentage,
+              enrollment_id,
+              enrollments!inner(
+                id,
+                branch_id,
+                academic_year_id,
+                students(name, student_code),
+                batches(name)
+              ),
+              exams!inner(
+                name,
+                date,
+                max_marks
+              )
+            `)
+            .eq('enrollments.branch_id', currentBranch.id)
+            .eq('enrollments.academic_year_id', currentAcademicYear.id)
+            .order('created_at', { ascending: false })
+            .limit(100)
+        ]);
+
+        // Process Batches
         setBatchesList(bData || []);
         if (bData && bData.length > 0) {
           setSelectedBatchId(bData[0].id);
@@ -91,16 +212,7 @@ export default function DashboardPage() {
           setSelectedBatchId('');
         }
 
-        const jsDay = new Date().getDay();
-        const dbDay = jsDay === 0 ? 7 : jsDay;
-
-        const { data: todaySchedules } = await supabase
-          .from('schedules')
-          .select('*, batches(name, class, branch_id), rooms(name), faculty(name)')
-          .eq('day_of_week', dbDay)
-          .eq('branch_id', currentBranch.id)
-          .eq('academic_year_id', currentAcademicYear.id);
-
+        // Map Today's Classes
         const mappedClasses: ClassItem[] = (todaySchedules || []).map((s: any) => {
           const formatTime = (t: string) => {
             if (!t) return '';
@@ -138,7 +250,6 @@ export default function DashboardPage() {
           };
         });
 
-        // Sort classes chronologically by start_time
         mappedClasses.sort((a, b) => {
           const s1 = (todaySchedules || []).find((s: any) => s.id === a.id);
           const s2 = (todaySchedules || []).find((s: any) => s.id === b.id);
@@ -147,85 +258,20 @@ export default function DashboardPage() {
 
         const activeClasses = mappedClasses;
 
-        // Query outstanding dues
+        // Process Fees Due
         let feesDueStr = '₹0';
-        if (!isMentor) {
-          const { data: unpaidInstallments } = await supabase
-            .from('fee_installments')
-            .select(`
-              due_amount,
-              student_fees (
-                enrollments (
-                  branch_id,
-                  academic_year_id
-                )
-              )
-            `)
-            .in('status', ['Due', 'Overdue']);
-
-          const filteredDues = (unpaidInstallments || []).filter((inst: any) => {
-            const enrollment = inst.student_fees?.enrollments;
-            return enrollment && 
-              enrollment.branch_id === currentBranch.id && 
-              enrollment.academic_year_id === currentAcademicYear.id;
-          });
-          const totalDue = filteredDues.reduce((sum, inst) => sum + parseFloat(inst.due_amount), 0);
+        if (!isMentor && unpaidRes.data) {
+          const totalDue = (unpaidRes.data || []).reduce((sum: number, inst: any) => sum + parseFloat(inst.due_amount || '0'), 0);
           feesDueStr = `₹${totalDue.toLocaleString('en-IN')}`;
         }
 
-        // Query low attendance student count (<75%)
-        const { data: lowAttendanceData } = await supabase
-          .from('report_cards')
-          .select(`
-            attendance_percentage,
-            enrollments (
-              branch_id
-            )
-          `)
-          .eq('academic_year_id', currentAcademicYear.id)
-          .lt('attendance_percentage', 75);
-
-        const filteredLowAttendance = (lowAttendanceData || []).filter((rc: any) => {
-          return rc.enrollments && rc.enrollments.branch_id === currentBranch.id;
-        });
-        const lowAttendanceCount = filteredLowAttendance.length;
-
-        // Query upcoming exams count
-        const todayDateStr = new Date().toISOString().split('T')[0];
-        const { count: examCount } = await supabase
-          .from('exams')
-          .select('*', { count: 'exact', head: true })
-          .eq('branch_id', currentBranch.id)
-          .eq('academic_year_id', currentAcademicYear.id)
-          .gte('date', todayDateStr);
 
         setClasses(activeClasses);
 
         // ── Generate real-time alerts ──────────────────────────────
         const computedAlerts: AlertItem[] = [];
 
-        // 1) Fetch attendance for consecutive-absence detection
-        const { data: attData } = await supabase
-          .from('attendance')
-          .select(`
-            status,
-            enrollment_id,
-            enrollments!inner(
-              id,
-              branch_id,
-              academic_year_id,
-              students(name, student_code),
-              batches(name)
-            ),
-            class_sessions!inner(
-              subject_name,
-              date
-            )
-          `)
-          .eq('enrollments.branch_id', currentBranch.id)
-          .eq('enrollments.academic_year_id', currentAcademicYear.id);
-
-        // Group by enrollment → subject, sort by date, find consecutive absences
+        // 1) Consecutive-absence detection
         const attGrouped: Record<string, {
           name: string; code: string; batch: string;
           subjects: Record<string, { status: string; date: string }[]>;
@@ -259,35 +305,13 @@ export default function DashboardPage() {
                   title: `Consecutive Absences — ${student.name}`,
                   description: `${student.name} (${student.code}) was absent back-to-back in ${subj} (${student.batch}) on ${records[i].date} and ${records[i + 1].date}.`
                 });
-                break; // one alert per student-subject
+                break;
               }
             }
           });
         });
 
-        // 2) Fetch exam results for consecutive-low-score detection
-        const { data: resData } = await supabase
-          .from('results')
-          .select(`
-            marks_obtained,
-            percentage,
-            enrollment_id,
-            enrollments!inner(
-              id,
-              branch_id,
-              academic_year_id,
-              students(name, student_code),
-              batches(name)
-            ),
-            exams!inner(
-              name,
-              date,
-              max_marks
-            )
-          `)
-          .eq('enrollments.branch_id', currentBranch.id)
-          .eq('enrollments.academic_year_id', currentAcademicYear.id);
-
+        // 2) Consecutive-low-score detection
         const resGrouped: Record<string, {
           name: string; code: string; batch: string;
           scores: { examName: string; date: string; percentage: number; marks: number }[];
@@ -322,7 +346,7 @@ export default function DashboardPage() {
                 title: `Consecutive Low Scores — ${student.name}`,
                 description: `${student.name} (${student.code}) scored below 25% consecutively in "${s1.examName}" (${s1.percentage}%) and "${s2.examName}" (${s2.percentage}%) in ${student.batch}.`
               });
-              break; // one alert per student
+              break;
             }
           }
         });

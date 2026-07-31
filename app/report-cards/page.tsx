@@ -64,11 +64,35 @@ interface StudentConsolidatedRow {
   rank: number;
 }
 
+interface SavedReportCard {
+  id: string;
+  batchId: string;
+  batchName: string;
+  title: string;
+  monthYear: string;
+  dateSaved: string;
+  exams: ExamItem[];
+  rows: StudentConsolidatedRow[];
+  metrics: {
+    totalStudents: number;
+    classAvg: number;
+    topScorerName: string;
+    totalAbsentees: number;
+    examsCount: number;
+  };
+}
+
 /* ─── Component ─────────────────────────────────────────────────────────── */
 
 export default function ReportCardsPage() {
   const supabase = createClient();
   const { currentBranch, currentAcademicYear } = useAppStore();
+
+  // Navigation Tab
+  const [activeTab, setActiveTab] = useState<'generate' | 'saved'>('generate');
+
+  // Saved Reports State
+  const [savedReports, setSavedReports] = useState<SavedReportCard[]>([]);
 
   // Batches & Exams State
   const [batches, setBatches] = useState<BatchItem[]>([]);
@@ -92,6 +116,140 @@ export default function ReportCardsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'top3' | 'absentees'>('all');
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  // Load saved report cards from localStorage (with initial samples if empty)
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('shiksharthi_saved_report_cards');
+      if (stored) {
+        setSavedReports(JSON.parse(stored));
+      } else {
+        const defaultSaved: SavedReportCard[] = [
+          {
+            id: 'saved_11_jee',
+            batchId: 'mock_1',
+            batchName: '11 JEE',
+            title: '11 JEE Report Card — July 2026',
+            monthYear: 'July 2026',
+            dateSaved: '31 Jul 2026',
+            exams: [
+              { id: 'e1', name: 'Physics Test 1', type: 'Subject Test', subject_name: 'Physics', date: '2026-07-10', max_marks: 100 },
+              { id: 'e2', name: 'Chemistry Test 1', type: 'Subject Test', subject_name: 'Chemistry', date: '2026-07-18', max_marks: 100 },
+              { id: 'e3', name: 'Maths Test 1', type: 'Subject Test', subject_name: 'Mathematics', date: '2026-07-25', max_marks: 100 }
+            ],
+            rows: [
+              { enrollmentId: 's1', studentCode: 'JEE-101', studentName: 'Aarav Sharma', totalMarksObtained: 275, totalMaxMarks: 300, overallPercentage: 91.7, absentCount: 0, rank: 1, examResults: { e1: { examId: 'e1', examName: 'Physics Test 1', subjectName: 'Physics', maxMarks: 100, marksObtained: 92, percentage: 92 }, e2: { examId: 'e2', examName: 'Chemistry Test 1', subjectName: 'Chemistry', maxMarks: 100, marksObtained: 90, percentage: 90 }, e3: { examId: 'e3', examName: 'Maths Test 1', subjectName: 'Mathematics', maxMarks: 100, marksObtained: 93, percentage: 93 } } },
+              { enrollmentId: 's2', studentCode: 'JEE-102', studentName: 'Ananya Verma', totalMarksObtained: 252, totalMaxMarks: 300, overallPercentage: 84.0, absentCount: 0, rank: 2, examResults: { e1: { examId: 'e1', examName: 'Physics Test 1', subjectName: 'Physics', maxMarks: 100, marksObtained: 85, percentage: 85 }, e2: { examId: 'e2', examName: 'Chemistry Test 1', subjectName: 'Chemistry', maxMarks: 100, marksObtained: 82, percentage: 82 }, e3: { examId: 'e3', examName: 'Maths Test 1', subjectName: 'Mathematics', maxMarks: 100, marksObtained: 85, percentage: 85 } } },
+              { enrollmentId: 's3', studentCode: 'JEE-103', studentName: 'Rohan Gupta', totalMarksObtained: 231, totalMaxMarks: 300, overallPercentage: 77.0, absentCount: 0, rank: 3, examResults: { e1: { examId: 'e1', examName: 'Physics Test 1', subjectName: 'Physics', maxMarks: 100, marksObtained: 78, percentage: 78 }, e2: { examId: 'e2', examName: 'Chemistry Test 1', subjectName: 'Chemistry', maxMarks: 100, marksObtained: 75, percentage: 75 }, e3: { examId: 'e3', examName: 'Maths Test 1', subjectName: 'Mathematics', maxMarks: 100, marksObtained: 78, percentage: 78 } } }
+            ],
+            metrics: { totalStudents: 3, classAvg: 84.2, topScorerName: 'Aarav Sharma', totalAbsentees: 0, examsCount: 3 }
+          },
+          {
+            id: 'saved_11_neet',
+            batchId: 'mock_2',
+            batchName: '11 NEET',
+            title: '11 NEET Report Card — July 2026',
+            monthYear: 'July 2026',
+            dateSaved: '31 Jul 2026',
+            exams: [
+              { id: 'n1', name: 'Biology Test 1', type: 'Subject Test', subject_name: 'Biology', date: '2026-07-12', max_marks: 100 },
+              { id: 'n2', name: 'Chemistry Test 1', type: 'Subject Test', subject_name: 'Chemistry', date: '2026-07-20', max_marks: 100 }
+            ],
+            rows: [
+              { enrollmentId: 's4', studentCode: 'NEET-201', studentName: 'Diya Patel', totalMarksObtained: 188, totalMaxMarks: 200, overallPercentage: 94.0, absentCount: 0, rank: 1, examResults: { n1: { examId: 'n1', examName: 'Biology Test 1', subjectName: 'Biology', maxMarks: 100, marksObtained: 96, percentage: 96 }, n2: { examId: 'n2', examName: 'Chemistry Test 1', subjectName: 'Chemistry', maxMarks: 100, marksObtained: 92, percentage: 92 } } },
+              { enrollmentId: 's5', studentCode: 'NEET-202', studentName: 'Ishaan Singh', totalMarksObtained: 165, totalMaxMarks: 200, overallPercentage: 82.5, absentCount: 0, rank: 2, examResults: { n1: { examId: 'n1', examName: 'Biology Test 1', subjectName: 'Biology', maxMarks: 100, marksObtained: 84, percentage: 84 }, n2: { examId: 'n2', examName: 'Chemistry Test 1', subjectName: 'Chemistry', maxMarks: 100, marksObtained: 81, percentage: 81 } } }
+            ],
+            metrics: { totalStudents: 2, classAvg: 88.3, topScorerName: 'Diya Patel', totalAbsentees: 0, examsCount: 2 }
+          },
+          {
+            id: 'saved_12_jee_b',
+            batchId: 'mock_3',
+            batchName: '12 JEE B',
+            title: '12 JEE B Report Card — July 2026',
+            monthYear: 'July 2026',
+            dateSaved: '31 Jul 2026',
+            exams: [
+              { id: 'j1', name: 'Mock Test 1', type: 'Mock Test', subject_name: 'Full Syllabus', date: '2026-07-15', max_marks: 300 }
+            ],
+            rows: [
+              { enrollmentId: 's6', studentCode: 'JEEB-301', studentName: 'Kabir Mehta', totalMarksObtained: 245, totalMaxMarks: 300, overallPercentage: 81.7, absentCount: 0, rank: 1, examResults: { j1: { examId: 'j1', examName: 'Mock Test 1', subjectName: 'Full Syllabus', maxMarks: 300, marksObtained: 245, percentage: 81.7 } } },
+              { enrollmentId: 's7', studentCode: 'JEEB-302', studentName: 'Sneha Roy', totalMarksObtained: 210, totalMaxMarks: 300, overallPercentage: 70.0, absentCount: 0, rank: 2, examResults: { j1: { examId: 'j1', examName: 'Mock Test 1', subjectName: 'Full Syllabus', maxMarks: 300, marksObtained: 210, percentage: 70.0 } } }
+            ],
+            metrics: { totalStudents: 2, classAvg: 75.9, topScorerName: 'Kabir Mehta', totalAbsentees: 0, examsCount: 1 }
+          }
+        ];
+        setSavedReports(defaultSaved);
+        localStorage.setItem('shiksharthi_saved_report_cards', JSON.stringify(defaultSaved));
+      }
+    } catch (e) {
+      console.error('Failed to load saved report cards from storage', e);
+    }
+  }, []);
+
+  // Save current report to stored list
+  const handleSaveCurrentReport = () => {
+    if (!generatedReport) return;
+    const now = new Date();
+    const monthYear = now.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+
+    const newSavedItem: SavedReportCard = {
+      id: 'saved_' + Date.now(),
+      batchId: selectedBatchId,
+      batchName: generatedReport.batchName,
+      title: generatedReport.title,
+      monthYear,
+      dateSaved: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+      exams: generatedReport.exams,
+      rows: generatedReport.rows,
+      metrics: {
+        totalStudents: generatedReport.rows.length,
+        classAvg: metrics?.classAvg || 0,
+        topScorerName: metrics?.topScorer?.studentName || 'N/A',
+        totalAbsentees: metrics?.totalAbsentees || 0,
+        examsCount: generatedReport.exams.length
+      }
+    };
+
+    const updated = [newSavedItem, ...savedReports.filter(r => r.id !== newSavedItem.id)];
+    setSavedReports(updated);
+    try {
+      localStorage.setItem('shiksharthi_saved_report_cards', JSON.stringify(updated));
+    } catch (e) {
+      console.error('Failed to save to localStorage', e);
+    }
+    alert(`"${generatedReport.title}" saved successfully! You can view or download it under Saved Report Cards.`);
+  };
+
+  // Delete saved report
+  const handleDeleteSavedReport = (id: string) => {
+    if (!confirm('Are you sure you want to delete this saved report card?')) return;
+    const updated = savedReports.filter(r => r.id !== id);
+    setSavedReports(updated);
+    try {
+      localStorage.setItem('shiksharthi_saved_report_cards', JSON.stringify(updated));
+    } catch (e) {
+      console.error('Failed to update localStorage', e);
+    }
+  };
+
+  // Group saved reports monthwise
+  const groupedSavedReports = useMemo(() => {
+    const groups: { monthYear: string; reports: SavedReportCard[] }[] = [];
+    const map = new Map<string, SavedReportCard[]>();
+
+    savedReports.forEach(r => {
+      const key = r.monthYear || 'Other';
+      if (map.has(key)) {
+        map.get(key)!.push(r);
+      } else {
+        const newList = [r];
+        map.set(key, newList);
+        groups.push({ monthYear: key, reports: newList });
+      }
+    });
+
+    return groups;
+  }, [savedReports]);
 
   // 1. Fetch batches for current branch & academic year
   useEffect(() => {
@@ -406,8 +564,9 @@ export default function ReportCardsPage() {
   };
 
   // PDF Export Generator
-  const handleDownloadPDF = async () => {
-    if (!generatedReport) return;
+  const handleDownloadPDF = async (customReport?: any) => {
+    const reportToUse = customReport || generatedReport;
+    if (!reportToUse) return;
     setDownloadingPdf(true);
     try {
       const { default: { Document, Page, Text, View, StyleSheet, pdf, Image } } = await import('@react-pdf/renderer');
@@ -439,7 +598,7 @@ export default function ReportCardsPage() {
         footer: { position: 'absolute', bottom: 16, left: 24, right: 24, textAlign: 'center', fontSize: 7.5, color: '#94A3B8' }
       });
 
-      const examColsCount = generatedReport.exams.length;
+      const examColsCount = reportToUse.exams.length;
       const rankW = 35;
       const codeW = 60;
       const nameW = 110;
@@ -451,22 +610,27 @@ export default function ReportCardsPage() {
       const remainingW = totalPageW - (rankW + codeW + nameW + totalW + pctW);
       const examColW = Math.max(45, Math.floor(remainingW / (examColsCount || 1)));
 
+      const totalStudents = reportToUse.rows.length;
+      const totalPctSum = reportToUse.rows.reduce((acc: number, r: any) => acc + r.overallPercentage, 0);
+      const classAvg = totalStudents > 0 ? Math.round((totalPctSum / totalStudents) * 10) / 10 : 0;
+      const topScorer = reportToUse.rows[0];
+
       const ReportDoc = (
         <Document>
           <Page size="A4" orientation={examColsCount > 4 ? 'landscape' : 'portrait'} style={pdfStyles.page}>
             {/* Header */}
             <View style={pdfStyles.header}>
               {logoUrl ? <Image src={logoUrl} style={pdfStyles.logo} /> : null}
-              <Text style={pdfStyles.title}>{generatedReport.title}</Text>
-              <Text style={pdfStyles.subtitle}>Batch: {generatedReport.batchName} | Generated on {generatedReport.dateGenerated}</Text>
+              <Text style={pdfStyles.title}>{reportToUse.title}</Text>
+              <Text style={pdfStyles.subtitle}>Batch: {reportToUse.batchName} | Saved/Generated: {reportToUse.dateGenerated || reportToUse.dateSaved}</Text>
             </View>
 
             {/* Meta Row */}
             <View style={pdfStyles.metaRow}>
-              <Text style={pdfStyles.metaText}><Text style={pdfStyles.metaBold}>Exams Included:</Text> {generatedReport.exams.length}</Text>
-              <Text style={pdfStyles.metaText}><Text style={pdfStyles.metaBold}>Total Students:</Text> {generatedReport.rows.length}</Text>
-              <Text style={pdfStyles.metaText}><Text style={pdfStyles.metaBold}>Class Average:</Text> {metrics?.classAvg}%</Text>
-              <Text style={pdfStyles.metaText}><Text style={pdfStyles.metaBold}>Top Scorer:</Text> {metrics?.topScorer?.studentName} ({metrics?.topScorer?.overallPercentage}%)</Text>
+              <Text style={pdfStyles.metaText}><Text style={pdfStyles.metaBold}>Exams Included:</Text> {reportToUse.exams.length}</Text>
+              <Text style={pdfStyles.metaText}><Text style={pdfStyles.metaBold}>Total Students:</Text> {reportToUse.rows.length}</Text>
+              <Text style={pdfStyles.metaText}><Text style={pdfStyles.metaBold}>Class Average:</Text> {reportToUse.metrics?.classAvg ?? classAvg}%</Text>
+              <Text style={pdfStyles.metaText}><Text style={pdfStyles.metaBold}>Top Scorer:</Text> {reportToUse.metrics?.topScorerName || topScorer?.studentName || 'N/A'}</Text>
             </View>
 
             {/* Table */}
@@ -477,7 +641,7 @@ export default function ReportCardsPage() {
                 <Text style={[pdfStyles.tableHeaderCell, { width: codeW }]}>Code</Text>
                 <Text style={[pdfStyles.tableHeaderCell, { width: nameW, textAlign: 'left' }]}>Student Name</Text>
 
-                {generatedReport.exams.map(ex => (
+                {reportToUse.exams.map((ex: any) => (
                   <Text key={ex.id} style={[pdfStyles.tableHeaderCell, { width: examColW }]}>
                     {ex.subject_name} ({ex.max_marks})
                   </Text>
@@ -488,7 +652,7 @@ export default function ReportCardsPage() {
               </View>
 
               {/* Rows */}
-              {generatedReport.rows.map((row, idx) => {
+              {reportToUse.rows.map((row: any, idx: number) => {
                 const isAlt = idx % 2 === 1;
                 return (
                   <View key={row.enrollmentId} style={[pdfStyles.tableRow, isAlt ? pdfStyles.tableRowAlt : {}]}>
@@ -503,7 +667,7 @@ export default function ReportCardsPage() {
                     <Text style={[pdfStyles.tableCell, { width: codeW, color: '#64748B' }]}>{row.studentCode}</Text>
                     <Text style={[pdfStyles.tableCell, pdfStyles.tableCellBold, { width: nameW, textAlign: 'left' }]}>{row.studentName}</Text>
 
-                    {generatedReport.exams.map(ex => {
+                    {reportToUse.exams.map((ex: any) => {
                       const res = row.examResults[ex.id];
                       const val = res?.marksObtained;
                       return (
@@ -540,7 +704,7 @@ export default function ReportCardsPage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${generatedReport.title.replace(/[^a-zA-Z0-9]/g, '_')}_Report.pdf`;
+      link.download = `${reportToUse.title.replace(/[^a-zA-Z0-9]/g, '_')}_Report.pdf`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

@@ -50,6 +50,8 @@ export default function ExamsPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [isEditingMarks, setIsEditingMarks] = useState(false);
   const [editableResults, setEditableResults] = useState<{ [enrollmentId: string]: string }>({});
+  // Set of exam IDs that have at least one result saved in DB
+  const [examsWithResults, setExamsWithResults] = useState<Set<string>>(new Set());
 
   const [loading, setLoading] = useState(true);
 
@@ -117,7 +119,18 @@ export default function ExamsPage() {
           chaptersCovered: e.chapters_covered || ''
         }));
 
-
+        // Fetch which exam IDs already have at least one result saved
+        const examIds = mappedExams.map(e => e.id);
+        if (examIds.length > 0) {
+          const { data: resultRows } = await supabase
+            .from('results')
+            .select('exam_id')
+            .in('exam_id', examIds);
+          const withResults = new Set<string>((resultRows || []).map((r: any) => r.exam_id));
+          setExamsWithResults(withResults);
+        } else {
+          setExamsWithResults(new Set());
+        }
 
         setExams(mappedExams);
         if (mappedExams.length > 0) {
@@ -418,6 +431,10 @@ export default function ExamsPage() {
         });
 
         setResults(updatedWithIds);
+        // Mark this exam as having results so the red dot disappears
+        if (selectedExam) {
+          setExamsWithResults(prev => new Set([...prev, selectedExam.id]));
+        }
       } else {
         // If everything was deleted or none was upserted
         const clearedResults = finalRanked.map(r => {
@@ -529,40 +546,66 @@ export default function ExamsPage() {
             {pastExams.length === 0 ? (
               <p className="secondary-text" style={{ fontSize: '13px', fontStyle: 'italic', paddingLeft: '4px' }}>No past exams.</p>
             ) : (
-              pastExams.map((ex) => (
-                <div
-                  key={ex.id}
-                  className="card"
-                  style={{
-                    margin: 0,
-                    padding: '16px 20px',
-                    cursor: 'pointer',
-                    borderColor: selectedExam?.id === ex.id ? 'var(--primary-orange)' : 'var(--border-color)',
-                    backgroundColor: selectedExam?.id === ex.id ? 'var(--surface-secondary)' : 'var(--surface-card)',
-                    borderLeft: selectedExam?.id === ex.id ? '4px solid var(--primary-orange)' : '1px solid var(--border-color)',
-                    opacity: 0.85
-                  }}
-                  onClick={() => {
-                    setSelectedExam(ex);
-                    setIsEditingMarks(false);
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                    <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)' }}>{ex.name}</span>
-                    <span className="badge badge-secondary" style={{ fontSize: '11px', flexShrink: 0 }}>{ex.type}</span>
+              pastExams.map((ex) => {
+                const marksNotEntered = !examsWithResults.has(ex.id);
+                return (
+                  <div
+                    key={ex.id}
+                    className="card"
+                    style={{
+                      margin: 0,
+                      padding: '16px 20px',
+                      cursor: 'pointer',
+                      borderColor: selectedExam?.id === ex.id ? 'var(--primary-orange)' : marksNotEntered ? '#FCA5A5' : 'var(--border-color)',
+                      backgroundColor: selectedExam?.id === ex.id ? 'var(--surface-secondary)' : 'var(--surface-card)',
+                      borderLeft: selectedExam?.id === ex.id ? '4px solid var(--primary-orange)' : marksNotEntered ? '4px solid #EF4444' : '1px solid var(--border-color)',
+                      opacity: 0.9
+                    }}
+                    onClick={() => {
+                      setSelectedExam(ex);
+                      setIsEditingMarks(false);
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                        {/* Red dot: marks not entered yet */}
+                        {marksNotEntered && (
+                          <span
+                            title="Marks not entered yet"
+                            style={{
+                              display: 'inline-block',
+                              width: '8px',
+                              height: '8px',
+                              borderRadius: '50%',
+                              backgroundColor: '#EF4444',
+                              flexShrink: 0,
+                              boxShadow: '0 0 0 2px rgba(239,68,68,0.25)',
+                              animation: 'pulse 2s infinite'
+                            }}
+                          />
+                        )}
+                        <span style={{ fontWeight: '600', fontSize: '14px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ex.name}</span>
+                      </div>
+                      <span className="badge badge-secondary" style={{ fontSize: '11px', flexShrink: 0 }}>{ex.type}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '16px', marginTop: '8px', alignItems: 'center' }} className="caption">
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Layers size={13} />
+                        {ex.batchName}
+                      </span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Calendar size={13} />
+                        {ex.date}
+                      </span>
+                      {marksNotEntered && (
+                        <span style={{ color: '#EF4444', fontWeight: '600', fontSize: '11px', marginLeft: 'auto' }}>
+                          Marks pending
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '16px', marginTop: '8px' }} className="caption">
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Layers size={13} />
-                      {ex.batchName}
-                    </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <Calendar size={13} />
-                      {ex.date}
-                    </span>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 

@@ -22,7 +22,8 @@ import {
   StickyNote,
   AlertTriangle,
   Edit3,
-  Award
+  Award,
+  Search
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { createClient } from '@/utils/supabase/client';
@@ -104,8 +105,11 @@ export default function AttendancePage() {
   // --- Faculty Notes ---
   const [facultyNotes, setFacultyNotes] = useState('');
 
-  // --- Student List ---
+  // --- Student List & Search Queries ---
   const [studentList, setStudentList] = useState<StudentAttendanceItem[]>([]);
+  const [attendanceSearchQuery, setAttendanceSearchQuery] = useState('');
+  const [defaulterSearchQuery, setDefaulterSearchQuery] = useState('');
+
   const [submitting, setSubmitting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -119,11 +123,35 @@ export default function AttendancePage() {
   const [pendingAttendanceMap, setPendingAttendanceMap] = useState<Map<string, string> | null>(null);
   const [pendingDefaulterIds, setPendingDefaulterIds] = useState<Set<string> | null>(null);
 
-  // Derived: present students for defaulters list
+  // Derived: present students for defaulters list (sorted alphabetically)
   const presentStudents = useMemo(() => 
-    studentList.filter(s => s.status === 'Present'),
+    studentList
+      .filter(s => s.status === 'Present')
+      .sort((a, b) => a.name.localeCompare(b.name)),
     [studentList]
   );
+
+  // Derived: filtered attendance list for search (sorted alphabetically)
+  const filteredStudentList = useMemo(() => {
+    const list = [...studentList].sort((a, b) => a.name.localeCompare(b.name));
+    if (!attendanceSearchQuery.trim()) return list;
+    const q = attendanceSearchQuery.toLowerCase().trim();
+    return list.filter(s => 
+      s.name.toLowerCase().includes(q) || 
+      s.studentCode.toLowerCase().includes(q) ||
+      s.batchName.toLowerCase().includes(q)
+    );
+  }, [studentList, attendanceSearchQuery]);
+
+  // Derived: filtered present students for defaulter search
+  const filteredPresentStudents = useMemo(() => {
+    if (!defaulterSearchQuery.trim()) return presentStudents;
+    const q = defaulterSearchQuery.toLowerCase().trim();
+    return presentStudents.filter(s => 
+      s.name.toLowerCase().includes(q) || 
+      s.studentCode.toLowerCase().includes(q)
+    );
+  }, [presentStudents, defaulterSearchQuery]);
 
   // Set today's date as default
   useEffect(() => {
@@ -287,9 +315,10 @@ export default function AttendancePage() {
             batchId: e.batch_id,
             batchName: batches.find(b => b.id === e.batch_id)?.name ||
                        selectedClass?.batches.find(b => b.id === e.batch_id)?.name || 'Unknown',
-            status: e.status === 'Leave of Absence' ? 'Leave' : 'Present',
+            status: (e.status === 'Leave of Absence' ? 'Leave' : 'Present') as 'Present' | 'Absent' | 'Leave',
             preExistingLeave: e.status === 'Leave of Absence'
-          }));
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
 
         setStudentList(list);
       } catch (err) {
@@ -323,6 +352,8 @@ export default function AttendancePage() {
     setHomeworkDefaulters(new Set());
     setDefaultersExpanded(false);
     setFacultyNotes('');
+    setAttendanceSearchQuery('');
+    setDefaulterSearchQuery('');
     setActiveStep(1);
     setIsEditMode(false);
     setEditSessionIds([]);
@@ -798,47 +829,67 @@ export default function AttendancePage() {
                   </p>
                 ) : (
                   <>
+                    {/* Search input for attendance */}
+                    <div style={{ position: 'relative', marginBottom: '4px' }}>
+                      <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="Search student by name or code..."
+                        value={attendanceSearchQuery}
+                        onChange={e => setAttendanceSearchQuery(e.target.value)}
+                        style={{ paddingLeft: '32px', height: '36px', fontSize: '13px' }}
+                      />
+                    </div>
+
                     {selectedClass && selectedClass.batches.length > 1 && (
                       <p style={{ fontSize: '11px', color: 'var(--text-secondary)', margin: 0 }}>
                         Students are grouped by batch below for clarity.
                       </p>
                     )}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                      {studentList.map((student) => (
-                        <div key={student.enrollmentId} style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          padding: '10px 14px',
-                          borderRadius: 'var(--radius-sm)',
-                          backgroundColor: student.status === 'Absent' ? '#FEF2F2' : student.status === 'Leave' ? '#FFFBEB' : '#F8FAFC',
-                          border: '1px solid',
-                          borderColor: student.status === 'Absent' ? '#FEE2E2' : student.status === 'Leave' ? '#FEF3C7' : 'var(--border-color)',
-                          gap: '12px',
-                          transition: 'all 0.1s'
-                        }}>
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '13px' }}>{student.name}</span>
-                            <span className="caption" style={{ fontSize: '10px' }}>
-                              {student.studentCode}
-                              {selectedClass && selectedClass.batches.length > 1 && ` · ${student.batchName}`}
-                              {student.preExistingLeave && ' · Approved Leave'}
-                            </span>
+
+                    {filteredStudentList.length === 0 ? (
+                      <p className="secondary-text" style={{ textAlign: 'center', padding: '16px 0', fontSize: '13px' }}>
+                        No students found matching &quot;{attendanceSearchQuery}&quot;
+                      </p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {filteredStudentList.map((student) => (
+                          <div key={student.enrollmentId} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '10px 14px',
+                            borderRadius: 'var(--radius-sm)',
+                            backgroundColor: student.status === 'Absent' ? '#FEF2F2' : student.status === 'Leave' ? '#FFFBEB' : '#F8FAFC',
+                            border: '1px solid',
+                            borderColor: student.status === 'Absent' ? '#FEE2E2' : student.status === 'Leave' ? '#FEF3C7' : 'var(--border-color)',
+                            gap: '12px',
+                            transition: 'all 0.1s'
+                          }}>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              <span style={{ fontWeight: '600', color: 'var(--text-primary)', fontSize: '13px' }}>{student.name}</span>
+                              <span className="caption" style={{ fontSize: '10px' }}>
+                                {student.studentCode}
+                                {selectedClass && selectedClass.batches.length > 1 && ` · ${student.batchName}`}
+                                {student.preExistingLeave && ' · Approved Leave'}
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button type="button" className="btn" style={{ padding: '6px 12px', minHeight: '36px', backgroundColor: student.status === 'Present' ? 'var(--color-success)' : 'transparent', borderColor: student.status === 'Present' ? 'transparent' : 'var(--divider-color)', color: student.status === 'Present' ? '#FFF' : 'var(--text-secondary)' }} disabled={student.preExistingLeave} onClick={() => handleToggleStatus(student.enrollmentId, 'Present')}>
+                                <Check size={16} />
+                              </button>
+                              <button type="button" className="btn" style={{ padding: '6px 12px', minHeight: '36px', backgroundColor: student.status === 'Absent' ? 'var(--color-error)' : 'transparent', borderColor: student.status === 'Absent' ? 'transparent' : 'var(--divider-color)', color: student.status === 'Absent' ? '#FFF' : 'var(--text-secondary)' }} disabled={student.preExistingLeave} onClick={() => handleToggleStatus(student.enrollmentId, 'Absent')}>
+                                <X size={16} />
+                              </button>
+                              <button type="button" className="btn" style={{ padding: '6px 12px', minHeight: '36px', backgroundColor: student.status === 'Leave' ? 'var(--primary-orange)' : 'transparent', borderColor: student.status === 'Leave' ? 'transparent' : 'var(--divider-color)', color: student.status === 'Leave' ? '#FFF' : 'var(--text-secondary)' }} onClick={() => handleToggleStatus(student.enrollmentId, 'Leave')}>
+                                <UserMinus size={16} />
+                              </button>
+                            </div>
                           </div>
-                          <div style={{ display: 'flex', gap: '4px' }}>
-                            <button type="button" className="btn" style={{ padding: '6px 12px', minHeight: '36px', backgroundColor: student.status === 'Present' ? 'var(--color-success)' : 'transparent', borderColor: student.status === 'Present' ? 'transparent' : 'var(--divider-color)', color: student.status === 'Present' ? '#FFF' : 'var(--text-secondary)' }} disabled={student.preExistingLeave} onClick={() => handleToggleStatus(student.enrollmentId, 'Present')}>
-                              <Check size={16} />
-                            </button>
-                            <button type="button" className="btn" style={{ padding: '6px 12px', minHeight: '36px', backgroundColor: student.status === 'Absent' ? 'var(--color-error)' : 'transparent', borderColor: student.status === 'Absent' ? 'transparent' : 'var(--divider-color)', color: student.status === 'Absent' ? '#FFF' : 'var(--text-secondary)' }} disabled={student.preExistingLeave} onClick={() => handleToggleStatus(student.enrollmentId, 'Absent')}>
-                              <X size={16} />
-                            </button>
-                            <button type="button" className="btn" style={{ padding: '6px 12px', minHeight: '36px', backgroundColor: student.status === 'Leave' ? 'var(--primary-orange)' : 'transparent', borderColor: student.status === 'Leave' ? 'transparent' : 'var(--divider-color)', color: student.status === 'Leave' ? '#FFF' : 'var(--text-secondary)' }} onClick={() => handleToggleStatus(student.enrollmentId, 'Leave')}>
-                              <UserMinus size={16} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
@@ -1048,38 +1099,59 @@ export default function AttendancePage() {
                             No present students. Mark attendance first.
                           </p>
                         ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '240px', overflowY: 'auto' }}>
-                            {presentStudents.map(student => (
-                              <label
-                                key={student.enrollmentId}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '10px',
-                                  padding: '8px 10px',
-                                  borderRadius: 'var(--radius-sm)',
-                                  cursor: 'pointer',
-                                  backgroundColor: homeworkDefaulters.has(student.enrollmentId) ? '#FEF2F2' : 'transparent',
-                                  border: '1px solid',
-                                  borderColor: homeworkDefaulters.has(student.enrollmentId) ? '#FEE2E2' : 'transparent',
-                                  transition: 'all 0.1s'
-                                }}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={homeworkDefaulters.has(student.enrollmentId)}
-                                  onChange={() => handleToggleDefaulter(student.enrollmentId)}
-                                  style={{ accentColor: '#EF4444', width: '15px', height: '15px' }}
-                                />
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                  <span style={{ fontSize: '13px', fontWeight: homeworkDefaulters.has(student.enrollmentId) ? '600' : '500', color: homeworkDefaulters.has(student.enrollmentId) ? '#DC2626' : 'var(--text-primary)' }}>
-                                    {student.name}
-                                  </span>
-                                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{student.studentCode}</span>
-                                </div>
-                              </label>
-                            ))}
-                          </div>
+                          <>
+                            {/* Search input for defaulters */}
+                            <div style={{ position: 'relative', marginBottom: '10px' }}>
+                              <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+                              <input
+                                type="text"
+                                className="form-control"
+                                placeholder="Search present student..."
+                                value={defaulterSearchQuery}
+                                onChange={e => setDefaulterSearchQuery(e.target.value)}
+                                style={{ paddingLeft: '32px', height: '34px', fontSize: '12px' }}
+                              />
+                            </div>
+
+                            {filteredPresentStudents.length === 0 ? (
+                              <p className="secondary-text" style={{ textAlign: 'center', padding: '12px 0', fontSize: '12px' }}>
+                                No present students found matching &quot;{defaulterSearchQuery}&quot;
+                              </p>
+                            ) : (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '240px', overflowY: 'auto' }}>
+                                {filteredPresentStudents.map(student => (
+                                  <label
+                                    key={student.enrollmentId}
+                                    style={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: '10px',
+                                      padding: '8px 10px',
+                                      borderRadius: 'var(--radius-sm)',
+                                      cursor: 'pointer',
+                                      backgroundColor: homeworkDefaulters.has(student.enrollmentId) ? '#FEF2F2' : 'transparent',
+                                      border: '1px solid',
+                                      borderColor: homeworkDefaulters.has(student.enrollmentId) ? '#FEE2E2' : 'transparent',
+                                      transition: 'all 0.1s'
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={homeworkDefaulters.has(student.enrollmentId)}
+                                      onChange={() => handleToggleDefaulter(student.enrollmentId)}
+                                      style={{ accentColor: '#EF4444', width: '15px', height: '15px' }}
+                                    />
+                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                      <span style={{ fontSize: '13px', fontWeight: homeworkDefaulters.has(student.enrollmentId) ? '600' : '500', color: homeworkDefaulters.has(student.enrollmentId) ? '#DC2626' : 'var(--text-primary)' }}>
+                                        {student.name}
+                                      </span>
+                                      <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{student.studentCode}</span>
+                                    </div>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     )}

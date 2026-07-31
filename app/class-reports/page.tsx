@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   FileText,
   Calendar,
@@ -147,6 +147,25 @@ export default function ClassReportsPage() {
 
   const hasActiveFilters = filterDate || filterBatch || filterFaculty || filterSubject;
 
+  // Group reports by date (maintaining descending date order)
+  const groupedReports = useMemo(() => {
+    const groups: { date: string; reports: ClassReport[] }[] = [];
+    const dateMap = new Map<string, ClassReport[]>();
+
+    reports.forEach(report => {
+      const existing = dateMap.get(report.date);
+      if (existing) {
+        existing.push(report);
+      } else {
+        const newList = [report];
+        dateMap.set(report.date, newList);
+        groups.push({ date: report.date, reports: newList });
+      }
+    });
+
+    return groups;
+  }, [reports]);
+
   /* ─── Helpers ─────────────────────────────────────────────────────────── */
 
   const formatTime = (t: string) => {
@@ -184,6 +203,25 @@ export default function ClassReportsPage() {
     return dateStr;
   };
 
+  const formatExamDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T00:00:00');
+    if (isNaN(d.getTime())) return dateStr;
+    const day = d.getDate();
+    const month = d.toLocaleDateString('en-IN', { month: 'long' });
+    const year = d.getFullYear();
+    const nth = (n: number) => {
+      if (n > 3 && n < 21) return 'th';
+      switch (n % 10) {
+        case 1: return "st";
+        case 2: return "nd";
+        case 3: return "rd";
+        default: return "th";
+      }
+    };
+    return `Date-${day}${nth(day)} ${month} ${year}`;
+  };
+
   /* ─── PDF Generation ──────────────────────────────────────────────────── */
 
   const generatePDF = async (report: ClassReport) => {
@@ -195,6 +233,7 @@ export default function ClassReportsPage() {
       logoContainer: { alignItems: 'center', marginBottom: 12 },
       logo: { width: 160, height: 44, objectFit: 'contain' },
       title: { fontSize: 13, fontFamily: 'Helvetica-Bold', textAlign: 'center', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
+      examDateTitle: { fontSize: 16, fontFamily: 'Helvetica-Bold', textAlign: 'center', marginBottom: 16, color: '#000000' },
       
       metadataSection: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap' },
       metadataCol: { width: '48%', gap: 4 },
@@ -213,17 +252,18 @@ export default function ClassReportsPage() {
       
       tableColHeaderBlue: { width: '25%', backgroundColor: '#8DB4E2', padding: 6, justifyContent: 'center', alignItems: 'center', borderRightWidth: 1, borderRightColor: '#000000' },
       tableColHeaderBlueLast: { width: '25%', backgroundColor: '#8DB4E2', padding: 6, justifyContent: 'center', alignItems: 'center' },
-      tableColHeader2Blue: { width: '50%', backgroundColor: '#8DB4E2', padding: 6, justifyContent: 'center', alignItems: 'center', borderRightWidth: 1, borderRightColor: '#000000' },
-      tableColHeader2BlueLast: { width: '50%', backgroundColor: '#8DB4E2', padding: 6, justifyContent: 'center', alignItems: 'center' },
+      tableColHeader2Grey: { width: '50%', backgroundColor: '#F3F4F6', padding: 8, justifyContent: 'center', alignItems: 'center', borderRightWidth: 1, borderRightColor: '#000000' },
+      tableColHeader2GreyLast: { width: '50%', backgroundColor: '#F3F4F6', padding: 8, justifyContent: 'center', alignItems: 'center' },
       
       tableCellContent: { width: '25%', padding: 8, justifyContent: 'flex-start', alignItems: 'stretch', borderRightWidth: 1, borderRightColor: '#000000', minHeight: 80 },
       tableCellContentLast: { width: '25%', padding: 8, justifyContent: 'flex-start', alignItems: 'stretch', minHeight: 80 },
-      tableCellContent2: { width: '50%', padding: 8, justifyContent: 'flex-start', alignItems: 'stretch', borderRightWidth: 1, borderRightColor: '#000000', minHeight: 80 },
-      tableCellContent2Last: { width: '50%', padding: 8, justifyContent: 'flex-start', alignItems: 'stretch', minHeight: 80 },
+      tableCellContent2: { width: '50%', padding: 12, justifyContent: 'flex-start', alignItems: 'stretch', borderRightWidth: 1, borderRightColor: '#000000', minHeight: 120 },
+      tableCellContent2Center: { width: '50%', padding: 12, justifyContent: 'center', alignItems: 'center', minHeight: 120 },
       
       textBold: { fontFamily: 'Helvetica-Bold', fontSize: 10, color: '#000000', textAlign: 'center' },
       textNormal: { fontSize: 9, color: '#000000', lineHeight: 1.2 },
-      textRedBold: { fontFamily: 'Helvetica-Bold', fontSize: 9, color: '#FF0000', marginBottom: 3 },
+      textRedBold: { fontFamily: 'Helvetica-Bold', fontSize: 11, color: '#DC2626', marginBottom: 4 },
+      textExamTopic: { fontFamily: 'Helvetica-Bold', fontSize: 14, color: '#000000', textAlign: 'center' },
       textBlackBold: { fontFamily: 'Helvetica-Bold', fontSize: 9, color: '#000000', marginBottom: 3 },
       textMuted: { fontSize: 9, color: '#9CA3AF', fontStyle: 'italic', textAlign: 'center' },
       
@@ -240,154 +280,171 @@ export default function ClassReportsPage() {
             </View>
           ) : null}
           
-          <Text style={styles.title}>Daily Class Report</Text>
-          
-          {/* Faculty / Time Info */}
-          <View style={styles.metadataSection}>
-            <View style={styles.metadataCol}>
-              <View style={styles.metadataRow}>
-                <Text style={styles.metadataLabel}>Faculty</Text>
-                <Text style={styles.metadataValue}>{report.faculty_name}</Text>
-              </View>
-              <View style={styles.metadataRow}>
-                <Text style={styles.metadataLabel}>Time</Text>
-                <Text style={styles.metadataValue}>{formatTime(report.start_time)} – {formatTime(report.end_time)}</Text>
-              </View>
-            </View>
-            <View style={styles.metadataCol}>
-              <View style={styles.metadataRow}>
-                <Text style={styles.metadataLabel}>Attendance</Text>
-                <Text style={styles.metadataValue}>P: {report.present_count} | A: {report.absent_count} | L: {report.leave_count}</Text>
-              </View>
-              <View style={styles.metadataRow}>
-                <Text style={styles.metadataLabel}>Percentage</Text>
-                <Text style={styles.metadataValue}>{report.attendance_percentage}%</Text>
-              </View>
-            </View>
-          </View>
+          {report.is_exam ? (
+            <>
+              <Text style={styles.examDateTitle}>{formatExamDate(report.date)}</Text>
+              
+              {/* Exam Table */}
+              <View style={styles.table}>
+                {/* Row 1: Batch & Subject */}
+                <View style={styles.tableRow}>
+                  <View style={styles.tableColHeader2Grey}>
+                    <Text style={styles.textBold}>BATCH - {report.batch_name.toUpperCase()}</Text>
+                  </View>
+                  <View style={styles.tableColHeader2GreyLast}>
+                    <Text style={styles.textBold}>SUB - {report.subject_name.toUpperCase()}</Text>
+                  </View>
+                </View>
 
-          {/* Yellow/Blue Table */}
-          <View style={styles.table}>
-            {/* Row 1 */}
-            <View style={styles.tableRow}>
-              <View style={styles.tableColHeader2}>
-                <Text style={styles.textBold}>Date</Text>
-              </View>
-              <View style={styles.tableColValue2}>
-                <Text style={styles.textBold}>{formatDateDDMMYYYY(report.date)}</Text>
-              </View>
-            </View>
-            
-            {/* Row 2 */}
-            <View style={styles.tableRow}>
-              <View style={styles.tableColHeader4}>
-                <Text style={styles.textBold}>Class</Text>
-              </View>
-              <View style={styles.tableColValue4}>
-                <Text style={styles.textBold}>{report.batch_name}</Text>
-              </View>
-              <View style={styles.tableColHeader4}>
-                <Text style={styles.textBold}>Subject</Text>
-              </View>
-              <View style={styles.tableColValue4Last}>
-                <Text style={styles.textBold}>{report.subject_name}</Text>
-              </View>
-            </View>
-            
-            {/* Row 3 */}
-            {report.is_exam ? (
-              <View style={styles.tableRow}>
-                <View style={styles.tableColHeader2Blue}>
-                  <Text style={styles.textBold}>Exam Defaulters</Text>
+                {/* Row 2: Headers */}
+                <View style={styles.tableRow}>
+                  <View style={styles.tableColHeader2Grey}>
+                    <Text style={styles.textBold}>EXAM DEFAULTER</Text>
+                  </View>
+                  <View style={styles.tableColHeader2GreyLast}>
+                    <Text style={styles.textBold}>EXAM TOPIC</Text>
+                  </View>
                 </View>
-                <View style={styles.tableColHeader2BlueLast}>
-                  <Text style={styles.textBold}>Chapter Name</Text>
+
+                {/* Row 3: Body */}
+                <View style={styles.tableRowLast}>
+                  <View style={styles.tableCellContent2}>
+                    {report.absentee_list && report.absentee_list.length > 0 ? (
+                      report.absentee_list.map((name: string, idx: number) => (
+                        <Text key={idx} style={styles.textRedBold}>{name}</Text>
+                      ))
+                    ) : (
+                      <Text style={styles.textMuted}>None</Text>
+                    )}
+                  </View>
+                  
+                  <View style={styles.tableCellContent2Center}>
+                    <Text style={styles.textExamTopic}>{report.chapter_covered}</Text>
+                  </View>
                 </View>
               </View>
-            ) : (
-              <View style={styles.tableRow}>
-                <View style={styles.tableColHeaderBlue}>
-                  <Text style={styles.textBold}>Absentee List</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.title}>Daily Class Report</Text>
+              
+              {/* Faculty / Time Info */}
+              <View style={styles.metadataSection}>
+                <View style={styles.metadataCol}>
+                  <View style={styles.metadataRow}>
+                    <Text style={styles.metadataLabel}>Faculty</Text>
+                    <Text style={styles.metadataValue}>{report.faculty_name}</Text>
+                  </View>
+                  <View style={styles.metadataRow}>
+                    <Text style={styles.metadataLabel}>Time</Text>
+                    <Text style={styles.metadataValue}>{formatTime(report.start_time)} – {formatTime(report.end_time)}</Text>
+                  </View>
                 </View>
-                <View style={styles.tableColHeaderBlue}>
-                  <Text style={styles.textBold}>Homework Defaulters</Text>
-                </View>
-                <View style={styles.tableColHeaderBlue}>
-                  <Text style={styles.textBold}>Chapter Name</Text>
-                </View>
-                <View style={styles.tableColHeaderBlueLast}>
-                  <Text style={styles.textBold}>HW</Text>
+                <View style={styles.metadataCol}>
+                  <View style={styles.metadataRow}>
+                    <Text style={styles.metadataLabel}>Attendance</Text>
+                    <Text style={styles.metadataValue}>P: {report.present_count} | A: {report.absent_count} | L: {report.leave_count}</Text>
+                  </View>
+                  <View style={styles.metadataRow}>
+                    <Text style={styles.metadataLabel}>Percentage</Text>
+                    <Text style={styles.metadataValue}>{report.attendance_percentage}%</Text>
+                  </View>
                 </View>
               </View>
-            )}
-            
-            {/* Row 4 */}
-            {report.is_exam ? (
-              <View style={styles.tableRowLast}>
-                {/* Exam Defaulters (Absentees) Column */}
-                <View style={styles.tableCellContent2}>
-                  {report.absentee_list && report.absentee_list.length > 0 ? (
-                    report.absentee_list.map((name: string, idx: number) => (
-                      <Text key={idx} style={styles.textRedBold}>{name}</Text>
-                    ))
-                  ) : (
-                    <Text style={styles.textMuted}>None</Text>
-                  )}
+
+              {/* Regular Class Table */}
+              <View style={styles.table}>
+                {/* Row 1 */}
+                <View style={styles.tableRow}>
+                  <View style={styles.tableColHeader2}>
+                    <Text style={styles.textBold}>Date</Text>
+                  </View>
+                  <View style={styles.tableColValue2}>
+                    <Text style={styles.textBold}>{formatDateDDMMYYYY(report.date)}</Text>
+                  </View>
                 </View>
                 
-                {/* Chapter Column */}
-                <View style={styles.tableCellContent2Last}>
-                  <Text style={styles.textNormal}>{report.chapter_covered}</Text>
+                {/* Row 2 */}
+                <View style={styles.tableRow}>
+                  <View style={styles.tableColHeader4}>
+                    <Text style={styles.textBold}>Class</Text>
+                  </View>
+                  <View style={styles.tableColValue4}>
+                    <Text style={styles.textBold}>{report.batch_name}</Text>
+                  </View>
+                  <View style={styles.tableColHeader4}>
+                    <Text style={styles.textBold}>Subject</Text>
+                  </View>
+                  <View style={styles.tableColValue4Last}>
+                    <Text style={styles.textBold}>{report.subject_name}</Text>
+                  </View>
+                </View>
+                
+                {/* Row 3 */}
+                <View style={styles.tableRow}>
+                  <View style={styles.tableColHeaderBlue}>
+                    <Text style={styles.textBold}>Absentee List</Text>
+                  </View>
+                  <View style={styles.tableColHeaderBlue}>
+                    <Text style={styles.textBold}>Homework Defaulters</Text>
+                  </View>
+                  <View style={styles.tableColHeaderBlue}>
+                    <Text style={styles.textBold}>Chapter Name</Text>
+                  </View>
+                  <View style={styles.tableColHeaderBlueLast}>
+                    <Text style={styles.textBold}>HW</Text>
+                  </View>
+                </View>
+                
+                {/* Row 4 */}
+                <View style={styles.tableRowLast}>
+                  {/* Absentee Column */}
+                  <View style={styles.tableCellContent}>
+                    {report.absentee_list && report.absentee_list.length > 0 ? (
+                      report.absentee_list.map((name: string, idx: number) => (
+                        <Text key={idx} style={styles.textRedBold}>{name}</Text>
+                      ))
+                    ) : (
+                      <Text style={styles.textMuted}>None</Text>
+                    )}
+                  </View>
+                  
+                  {/* Defaulter Column */}
+                  <View style={styles.tableCellContent}>
+                    {report.homework_defaulter_list && report.homework_defaulter_list.length > 0 ? (
+                      report.homework_defaulter_list.map((name: string, idx: number) => (
+                        <Text key={idx} style={styles.textNormal}>{name}</Text>
+                      ))
+                    ) : (
+                      <Text style={styles.textNormal}>NULL</Text>
+                    )}
+                  </View>
+                  
+                  {/* Chapter Column */}
+                  <View style={styles.tableCellContent}>
+                    <Text style={styles.textNormal}>{report.chapter_covered}</Text>
+                  </View>
+                  
+                  {/* Homework Column */}
+                  <View style={styles.tableCellContentLast}>
+                    {report.homework_title ? (
+                      <View>
+                        <Text style={styles.textBlackBold}>{report.homework_title}</Text>
+                        {report.homework_description && (
+                          <Text style={[styles.textNormal, { marginBottom: 4 }]}>{report.homework_description}</Text>
+                        )}
+                        {report.homework_due_date && (
+                          <Text style={[styles.textNormal, { fontFamily: 'Helvetica-Bold', color: '#1D4ED8' }]}>Due: {formatDateDDMMYYYY(report.homework_due_date)}</Text>
+                        )}
+                      </View>
+                    ) : (
+                      <Text style={styles.textNormal}>Not Assigned</Text>
+                    )}
+                  </View>
                 </View>
               </View>
-            ) : (
-              <View style={styles.tableRowLast}>
-                {/* Absentee Column */}
-                <View style={styles.tableCellContent}>
-                  {report.absentee_list && report.absentee_list.length > 0 ? (
-                    report.absentee_list.map((name: string, idx: number) => (
-                      <Text key={idx} style={styles.textRedBold}>{name}</Text>
-                    ))
-                  ) : (
-                    <Text style={styles.textMuted}>None</Text>
-                  )}
-                </View>
-                
-                {/* Defaulter Column */}
-                <View style={styles.tableCellContent}>
-                  {report.homework_defaulter_list && report.homework_defaulter_list.length > 0 ? (
-                    report.homework_defaulter_list.map((name: string, idx: number) => (
-                      <Text key={idx} style={styles.textNormal}>{name}</Text>
-                    ))
-                  ) : (
-                    <Text style={styles.textNormal}>NULL</Text>
-                  )}
-                </View>
-                
-                {/* Chapter Column */}
-                <View style={styles.tableCellContent}>
-                  <Text style={styles.textNormal}>{report.chapter_covered}</Text>
-                </View>
-                
-                {/* Homework Column */}
-                <View style={styles.tableCellContentLast}>
-                  {report.homework_title ? (
-                    <View>
-                      <Text style={styles.textBlackBold}>{report.homework_title}</Text>
-                      {report.homework_description && (
-                        <Text style={[styles.textNormal, { marginBottom: 4 }]}>{report.homework_description}</Text>
-                      )}
-                      {report.homework_due_date && (
-                        <Text style={[styles.textNormal, { fontFamily: 'Helvetica-Bold', color: '#1D4ED8' }]}>Due: {formatDateDDMMYYYY(report.homework_due_date)}</Text>
-                      )}
-                    </View>
-                  ) : (
-                    <Text style={styles.textNormal}>Not Assigned</Text>
-                  )}
-                </View>
-              </View>
-            )}
-          </View>
+            </>
+          )}
           
           <Text style={styles.footer}>
             Generated by Shiksharthi OS • {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -437,7 +494,7 @@ export default function ClassReportsPage() {
           body { font-family: 'Inter', sans-serif; padding: 40px; color: #1F2937; max-width: 800px; margin: 0 auto; }
           .logo-container { text-align: center; margin-bottom: 16px; }
           .logo-container img { max-height: 55px; object-fit: contain; }
-          h2 { text-align: center; font-size: 16px; font-weight: 700; margin-bottom: 24px; text-transform: uppercase; letter-spacing: 0.5px; }
+          h2 { text-align: center; font-size: 18px; font-weight: 700; margin-bottom: 20px; text-transform: none; letter-spacing: 0.5px; }
           
           .meta-section { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 13px; }
           .meta-col { display: flex; flex-direction: column; gap: 4px; }
@@ -447,11 +504,12 @@ export default function ClassReportsPage() {
 
           table { width: 100%; border-collapse: collapse; border: 1px solid #000; margin: 20px 0; }
           tr { border-bottom: 1px solid #000; }
-          th, td { border-right: 1px solid #000; padding: 10px; font-size: 13px; }
+          th, td { border-right: 1px solid #000; padding: 12px; font-size: 14px; }
           th:last-child, td:last-child { border-right: none; }
           
-          .bg-yellow { backgroundColor: #FFFF00; background-color: #FFFF00; }
-          .bg-blue { backgroundColor: #8DB4E2; background-color: #8DB4E2; }
+          .bg-yellow { background-color: #FFFF00; }
+          .bg-blue { background-color: #8DB4E2; }
+          .bg-gray { background-color: #F3F4F6; }
           
           .text-bold { font-weight: bold; }
           .text-center { text-align: center; }
@@ -464,43 +522,65 @@ export default function ClassReportsPage() {
         <div class="logo-container">
           <img src="/logo.png" alt="Shiksharthi Logo" />
         </div>
-        <h2>Daily Class Report</h2>
-        
-        <div class="meta-section">
-          <div class="meta-col">
-            <div class="meta-row"><span class="meta-label">Faculty</span><span class="meta-value">${report.faculty_name}</span></div>
-            <div class="meta-row"><span class="meta-label">Time</span><span class="meta-value">${formatTime(report.start_time)} – ${formatTime(report.end_time)}</span></div>
-          </div>
-          <div class="meta-col">
-            <div class="meta-row"><span class="meta-label">Attendance</span><span class="meta-value">P: ${report.present_count} | A: ${report.absent_count} | L: ${report.leave_count}</span></div>
-            <div class="meta-row"><span class="meta-label">Percentage</span><span class="meta-value">${report.attendance_percentage}%</span></div>
-          </div>
-        </div>
 
-        <table>
-          <tr class="bg-yellow">
-            <th colspan="2" class="text-bold text-center">Date</th>
-            <th colspan="2" class="text-bold text-center">${formatDateDDMMYYYY(report.date)}</th>
-          </tr>
-          <tr class="bg-yellow">
-            <th class="text-bold text-center" style="width: 25%;">Class</th>
-            <td class="text-bold text-center" style="width: 25%;">${report.batch_name}</td>
-            <th class="text-bold text-center" style="width: 25%;">Subject</th>
-            <td class="text-bold text-center" style="width: 25%;">${report.subject_name}</td>
-          </tr>
-          <tr class="bg-blue">
-            <th class="text-bold text-center">Absentee List</th>
-            <th class="text-bold text-center">Homework Defaulters</th>
-            <th class="text-bold text-center">Chapter Name</th>
-            <th class="text-bold text-center">HW</th>
-          </tr>
-          <tr>
-            <td style="vertical-align: top;">${absenteesHtml}</td>
-            <td style="vertical-align: top; text-align: ${report.homework_defaulter_list && report.homework_defaulter_list.length > 0 ? 'left' : 'center'};">${defaultersHtml}</td>
-            <td style="vertical-align: top; text-align: center; font-weight: 500;">${report.chapter_covered}</td>
-            <td style="vertical-align: top;">${hwHtml}</td>
-          </tr>
-        </table>
+        ${report.is_exam ? `
+          <h2>${formatExamDate(report.date)}</h2>
+          <table>
+            <tr class="bg-gray">
+              <th colspan="2" class="text-bold text-center" style="width: 50%;">BATCH- ${report.batch_name.toUpperCase()}</th>
+              <th colspan="2" class="text-bold text-center" style="width: 50%;">SUB- ${report.subject_name.toUpperCase()}</th>
+            </tr>
+            <tr class="bg-gray">
+              <th colspan="2" class="text-bold text-center">EXAM DEFAULTER</th>
+              <th colspan="2" class="text-bold text-center">EXAM TOPIC</th>
+            </tr>
+            <tr>
+              <td colspan="2" style="vertical-align: top; padding: 16px;">
+                ${absenteesHtml}
+              </td>
+              <td colspan="2" style="vertical-align: middle; text-align: center; font-size: 16px; font-weight: bold; padding: 16px;">
+                ${report.chapter_covered}
+              </td>
+            </tr>
+          </table>
+        ` : `
+          <h2>Daily Class Report</h2>
+          <div class="meta-section">
+            <div class="meta-col">
+              <div class="meta-row"><span class="meta-label">Faculty</span><span class="meta-value">${report.faculty_name}</span></div>
+              <div class="meta-row"><span class="meta-label">Time</span><span class="meta-value">${formatTime(report.start_time)} – ${formatTime(report.end_time)}</span></div>
+            </div>
+            <div class="meta-col">
+              <div class="meta-row"><span class="meta-label">Attendance</span><span class="meta-value">P: ${report.present_count} | A: ${report.absent_count} | L: ${report.leave_count}</span></div>
+              <div class="meta-row"><span class="meta-label">Percentage</span><span class="meta-value">${report.attendance_percentage}%</span></div>
+            </div>
+          </div>
+
+          <table>
+            <tr class="bg-yellow">
+              <th colspan="2" class="text-bold text-center">Date</th>
+              <th colspan="2" class="text-bold text-center">${formatDateDDMMYYYY(report.date)}</th>
+            </tr>
+            <tr class="bg-yellow">
+              <th class="text-bold text-center" style="width: 25%;">Class</th>
+              <td class="text-bold text-center" style="width: 25%;">${report.batch_name}</td>
+              <th class="text-bold text-center" style="width: 25%;">Subject</th>
+              <td class="text-bold text-center" style="width: 25%;">${report.subject_name}</td>
+            </tr>
+            <tr class="bg-blue">
+              <th class="text-bold text-center">Absentee List</th>
+              <th class="text-bold text-center">Homework Defaulters</th>
+              <th class="text-bold text-center">Chapter Name</th>
+              <th class="text-bold text-center">HW</th>
+            </tr>
+            <tr>
+              <td style="vertical-align: top;">${absenteesHtml}</td>
+              <td style="vertical-align: top; text-align: ${report.homework_defaulter_list && report.homework_defaulter_list.length > 0 ? 'left' : 'center'};">${defaultersHtml}</td>
+              <td style="vertical-align: top; text-align: center; font-weight: 500;">${report.chapter_covered}</td>
+              <td style="vertical-align: top;">${hwHtml}</td>
+            </tr>
+          </table>
+        `}
 
         <div class="footer">Generated by Shiksharthi OS</div>
         <script>window.onload = function() { window.print(); }</script>
@@ -584,7 +664,7 @@ export default function ClassReportsPage() {
         )}
       </div>
 
-      {/* Reports List */}
+      {/* Reports List grouped by Date */}
       {loading ? (
         <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
           Loading reports...
@@ -598,227 +678,289 @@ export default function ClassReportsPage() {
           </p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {reports.map(report => {
-            const isExpanded = expandedId === report.id;
-            const totalStudents = report.present_count + report.absent_count + report.leave_count;
-            const attPct = report.attendance_percentage;
-
-            return (
-              <div key={report.id} className="card" style={{ margin: 0, overflow: 'hidden', transition: 'all 0.2s' }}>
-                {/* Collapsed Summary Row */}
-                <button
-                  type="button"
-                  onClick={() => setExpandedId(isExpanded ? null : report.id)}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '16px',
-                    width: '100%',
-                    padding: '16px 20px',
-                    border: 'none',
-                    backgroundColor: 'transparent',
-                    cursor: 'pointer',
-                    textAlign: 'left'
-                  }}
-                >
-                  {/* Date Badge */}
-                  <div style={{
-                    width: '52px',
-                    height: '52px',
-                    borderRadius: 'var(--radius-sm)',
-                    backgroundColor: 'var(--surface-secondary)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0
-                  }}>
-                    <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary-orange)', lineHeight: '1.1' }}>
-                      {new Date(report.date + 'T00:00:00').getDate()}
-                    </span>
-                    <span style={{ fontSize: '9px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                      {new Date(report.date + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short' })}
-                    </span>
-                  </div>
-
-                  {/* Info */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '4px', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '100px', backgroundColor: '#E2E8F0', color: 'var(--text-primary)' }}>
-                        {report.batch_name}
-                      </span>
-                      <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>
-                        {report.subject_name}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <Clock size={10} />{formatTime(report.start_time)} – {formatTime(report.end_time)}
-                      </span>
-                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                        <User size={10} />{report.faculty_name}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Attendance Bar */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-                    <div style={{ width: '80px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
-                        <span style={{ fontSize: '11px', fontWeight: '600', color: attPct >= 75 ? '#065F46' : attPct >= 50 ? '#92400E' : '#DC2626' }}>
-                          {attPct}%
-                        </span>
-                        <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{report.present_count}/{totalStudents}</span>
-                      </div>
-                      <div style={{ height: '4px', borderRadius: '2px', backgroundColor: '#E5E7EB', overflow: 'hidden' }}>
-                        <div style={{
-                          height: '100%',
-                          width: `${attPct}%`,
-                          borderRadius: '2px',
-                          backgroundColor: attPct >= 75 ? '#10B981' : attPct >= 50 ? '#F59E0B' : '#EF4444',
-                          transition: 'width 0.3s'
-                        }} />
-                      </div>
-                    </div>
-
-                    {/* Homework indicator */}
-                    {report.homework_title ? (
-                      <span style={{ fontSize: '9px', fontWeight: '600', padding: '2px 6px', borderRadius: '100px', backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>HW</span>
-                    ) : (
-                      <span style={{ fontSize: '9px', fontWeight: '600', padding: '2px 6px', borderRadius: '100px', backgroundColor: '#F3F4F6', color: '#9CA3AF' }}>—</span>
-                    )}
-
-                    {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
-                  </div>
-                </button>
-
-                {/* Expanded Report Detail */}
-                {isExpanded && (
-                  <div style={{ borderTop: '1px solid var(--border-color)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', animation: 'fadeIn 0.2s ease' }}>
-
-                    {/* Actions */}
-                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        style={{ padding: '6px 14px', minHeight: '36px', fontSize: '12px', gap: '6px' }}
-                        onClick={() => generatePDF(report)}
-                      >
-                        <Download size={14} /> Download PDF
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        style={{ padding: '6px 14px', minHeight: '36px', fontSize: '12px', gap: '6px' }}
-                        onClick={() => handlePrint(report)}
-                      >
-                        <Printer size={14} /> Print
-                      </button>
-                    </div>
-
-                    {/* Full Report Content */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                      {/* Logo Centered */}
-                      <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 0 0' }}>
-                        <img 
-                          src="/logo.png" 
-                          alt="Shiksharthi Logo" 
-                          style={{ maxHeight: '52px', objectFit: 'contain' }} 
-                        />
-                      </div>
-                      
-                      <h4 style={{ textAlign: 'center', fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-primary)', marginBottom: '8px', letterSpacing: '0.05em' }}>Daily Class Report</h4>
-
-                      {/* Class Info Grid */}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', padding: '16px', backgroundColor: '#F8FAFC', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
-                        <div>
-                          <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>Faculty</span>
-                          <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', marginTop: '2px' }}>{report.faculty_name}</p>
-                        </div>
-                        <div>
-                          <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>Time</span>
-                          <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', marginTop: '2px' }}>{formatTime(report.start_time)} – {formatTime(report.end_time)}</p>
-                        </div>
-                        <div>
-                          <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>Attendance Breakdown</span>
-                          <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', marginTop: '2px' }}>P: {report.present_count} | A: {report.absent_count} | L: {report.leave_count}</p>
-                        </div>
-                        <div>
-                          <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>Attendance %</span>
-                          <p style={{ fontSize: '14px', fontWeight: '700', color: attPct >= 75 ? '#10B981' : attPct >= 50 ? '#F59E0B' : '#EF4444', marginTop: '2px' }}>{attPct}%</p>
-                        </div>
-                      </div>
-
-                      {/* Yellow/Blue Grid Table */}
-                      <div style={{ overflowX: 'auto', border: '1px solid #000', borderRadius: '4px' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'sans-serif' }}>
-                          <thead>
-                            <tr style={{ borderBottom: '1px solid #000' }}>
-                              <th colSpan={2} style={{ backgroundColor: '#FFFF00', borderRight: '1px solid #000', padding: '12px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center' }}>Date</th>
-                              <th colSpan={2} style={{ backgroundColor: '#FFFF00', padding: '12px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center' }}>{formatDateDDMMYYYY(report.date)}</th>
-                            </tr>
-                            <tr style={{ borderBottom: '1px solid #000' }}>
-                              <th style={{ backgroundColor: '#FFFF00', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>Class</th>
-                              <td style={{ backgroundColor: '#FFFF00', borderRight: '1px solid #000', padding: '10px', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%', fontWeight: 'bold' }}>{report.batch_name}</td>
-                              <th style={{ backgroundColor: '#FFFF00', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>Subject</th>
-                              <td style={{ backgroundColor: '#FFFF00', padding: '10px', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%', fontWeight: 'bold' }}>{report.subject_name}</td>
-                            </tr>
-                            <tr style={{ borderBottom: '1px solid #000' }}>
-                              <th style={{ backgroundColor: '#8DB4E2', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>Absentee List</th>
-                              <th style={{ backgroundColor: '#8DB4E2', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>Homework Defaulters</th>
-                              <th style={{ backgroundColor: '#8DB4E2', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>Chapter Name</th>
-                              <th style={{ backgroundColor: '#8DB4E2', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>HW</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            <tr style={{ backgroundColor: '#FFFFFF' }}>
-                              <td style={{ borderRight: '1px solid #000', padding: '12px', fontSize: '13px', verticalAlign: 'top', minHeight: '80px', color: '#000' }}>
-                                {report.absentee_list && report.absentee_list.length > 0 ? (
-                                  report.absentee_list.map((name, idx) => (
-                                    <div key={idx} style={{ color: '#EF4444', fontWeight: 'bold', marginBottom: '4px' }}>{name}</div>
-                                  ))
-                                ) : (
-                                  <div style={{ color: '#9CA3AF', fontStyle: 'italic', textAlign: 'center' }}>None</div>
-                                )}
-                              </td>
-                              <td style={{ borderRight: '1px solid #000', padding: '12px', fontSize: '13px', verticalAlign: 'top', color: '#000', textAlign: report.homework_defaulter_list && report.homework_defaulter_list.length > 0 ? 'left' : 'center' }}>
-                                {report.homework_defaulter_list && report.homework_defaulter_list.length > 0 ? (
-                                  report.homework_defaulter_list.map((name, idx) => (
-                                    <div key={idx} style={{ fontWeight: '500', marginBottom: '4px' }}>{name}</div>
-                                  ))
-                                ) : (
-                                  <span style={{ fontWeight: '500' }}>NULL</span>
-                                )}
-                              </td>
-                              <td style={{ borderRight: '1px solid #000', padding: '12px', fontSize: '13px', verticalAlign: 'top', textAlign: 'center', color: '#000', fontWeight: '500' }}>
-                                {report.chapter_covered}
-                              </td>
-                              <td style={{ padding: '12px', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
-                                {report.homework_title ? (
-                                  <div>
-                                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{report.homework_title}</div>
-                                    {report.homework_description && (
-                                      <div style={{ fontSize: '12px', color: '#4B5563', whiteSpace: 'pre-line', marginBottom: '6px' }}>{report.homework_description}</div>
-                                    )}
-                                    {report.homework_due_date && (
-                                      <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#1D4ED8' }}>Due Date: {formatDateDDMMYYYY(report.homework_due_date)}</div>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <div style={{ textAlign: 'center', fontWeight: '500' }}>Not Assigned</div>
-                                )}
-                              </td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {groupedReports.map(group => (
+            <div key={group.date} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {/* Date Sub-section Header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 12px', backgroundColor: 'var(--surface-secondary)', borderRadius: 'var(--radius-sm)', borderLeft: '4px solid var(--primary-orange)' }}>
+                <Calendar size={16} style={{ color: 'var(--primary-orange)' }} />
+                <h4 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>
+                  {formatDate(group.date)}
+                </h4>
+                <span style={{ fontSize: '11px', fontWeight: '600', padding: '2px 8px', borderRadius: '100px', backgroundColor: 'var(--surface-card)', color: 'var(--text-secondary)' }}>
+                  {group.reports.length} report{group.reports.length !== 1 ? 's' : ''}
+                </span>
               </div>
-            );
-          })}
+
+              {/* Reports for this date */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {group.reports.map(report => {
+                  const isExpanded = expandedId === report.id;
+                  const totalStudents = report.present_count + report.absent_count + report.leave_count;
+                  const attPct = report.attendance_percentage;
+
+                  return (
+                    <div key={report.id} className="card" style={{ margin: 0, overflow: 'hidden', transition: 'all 0.2s' }}>
+                      {/* Collapsed Summary Row */}
+                      <button
+                        type="button"
+                        onClick={() => setExpandedId(isExpanded ? null : report.id)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '16px',
+                          width: '100%',
+                          padding: '16px 20px',
+                          border: 'none',
+                          backgroundColor: 'transparent',
+                          cursor: 'pointer',
+                          textAlign: 'left'
+                        }}
+                      >
+                        {/* Date Badge */}
+                        <div style={{
+                          width: '52px',
+                          height: '52px',
+                          borderRadius: 'var(--radius-sm)',
+                          backgroundColor: 'var(--surface-secondary)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0
+                        }}>
+                          <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary-orange)', lineHeight: '1.1' }}>
+                            {new Date(report.date + 'T00:00:00').getDate()}
+                          </span>
+                          <span style={{ fontSize: '9px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                            {new Date(report.date + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short' })}
+                          </span>
+                        </div>
+
+                        {/* Info */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '4px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '100px', backgroundColor: '#E2E8F0', color: 'var(--text-primary)' }}>
+                              {report.batch_name}
+                            </span>
+                            <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                              {report.subject_name}
+                            </span>
+                            {report.is_exam && (
+                              <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '100px', backgroundColor: '#F3E8FF', color: '#7E22CE' }}>
+                                Exam
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                              <Clock size={10} />{formatTime(report.start_time)} – {formatTime(report.end_time)}
+                            </span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                              <User size={10} />{report.faculty_name}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Attendance Bar */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                          <div style={{ width: '80px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
+                              <span style={{ fontSize: '11px', fontWeight: '600', color: attPct >= 75 ? '#065F46' : attPct >= 50 ? '#92400E' : '#DC2626' }}>
+                                {attPct}%
+                              </span>
+                              <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{report.present_count}/{totalStudents}</span>
+                            </div>
+                            <div style={{ height: '4px', borderRadius: '2px', backgroundColor: '#E5E7EB', overflow: 'hidden' }}>
+                              <div style={{
+                                height: '100%',
+                                width: `${attPct}%`,
+                                borderRadius: '2px',
+                                backgroundColor: attPct >= 75 ? '#10B981' : attPct >= 50 ? '#F59E0B' : '#EF4444',
+                                transition: 'width 0.3s'
+                              }} />
+                            </div>
+                          </div>
+
+                          {/* Homework indicator */}
+                          {report.homework_title ? (
+                            <span style={{ fontSize: '9px', fontWeight: '600', padding: '2px 6px', borderRadius: '100px', backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>HW</span>
+                          ) : (
+                            <span style={{ fontSize: '9px', fontWeight: '600', padding: '2px 6px', borderRadius: '100px', backgroundColor: '#F3F4F6', color: '#9CA3AF' }}>—</span>
+                          )}
+
+                          {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
+                        </div>
+                      </button>
+
+                      {/* Expanded Report Detail */}
+                      {isExpanded && (
+                        <div style={{ borderTop: '1px solid var(--border-color)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px', animation: 'fadeIn 0.2s ease' }}>
+
+                          {/* Actions */}
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{ padding: '6px 14px', minHeight: '36px', fontSize: '12px', gap: '6px' }}
+                              onClick={() => generatePDF(report)}
+                            >
+                              <Download size={14} /> Download PDF
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{ padding: '6px 14px', minHeight: '36px', fontSize: '12px', gap: '6px' }}
+                              onClick={() => handlePrint(report)}
+                            >
+                              <Printer size={14} /> Print
+                            </button>
+                          </div>
+
+                          {/* Full Report Content */}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            {/* Logo Centered */}
+                            <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 0 0' }}>
+                              <img 
+                                src="/logo.png" 
+                                alt="Shiksharthi Logo" 
+                                style={{ maxHeight: '52px', objectFit: 'contain' }} 
+                              />
+                            </div>
+                            
+                            <h4 style={{ textAlign: 'center', fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-primary)', marginBottom: '8px', letterSpacing: '0.05em' }}>Daily Class Report</h4>
+
+                            {/* Class Info Grid */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', padding: '16px', backgroundColor: '#F8FAFC', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                              <div>
+                                <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>Faculty</span>
+                                <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', marginTop: '2px' }}>{report.faculty_name}</p>
+                              </div>
+                              <div>
+                                <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>Time</span>
+                                <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', marginTop: '2px' }}>{formatTime(report.start_time)} – {formatTime(report.end_time)}</p>
+                              </div>
+                              <div>
+                                <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>Attendance Breakdown</span>
+                                <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', marginTop: '2px' }}>P: {report.present_count} | A: {report.absent_count} | L: {report.leave_count}</p>
+                              </div>
+                              <div>
+                                <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>Attendance %</span>
+                                <p style={{ fontSize: '14px', fontWeight: '700', color: attPct >= 75 ? '#10B981' : attPct >= 50 ? '#F59E0B' : '#EF4444', marginTop: '2px' }}>{attPct}%</p>
+                              </div>
+                            </div>
+
+                            {/* Grid Table */}
+                            <div style={{ overflowX: 'auto', border: '1px solid #000', borderRadius: '4px' }}>
+                              {report.is_exam ? (
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'sans-serif' }}>
+                                  <thead>
+                                    <tr style={{ borderBottom: '1px solid #000', backgroundColor: '#F3F4F6' }}>
+                                      <th colSpan={2} style={{ borderRight: '1px solid #000', padding: '12px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center', width: '50%' }}>
+                                        BATCH- {report.batch_name.toUpperCase()}
+                                      </th>
+                                      <th colSpan={2} style={{ padding: '12px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center', width: '50%' }}>
+                                        SUB- {report.subject_name.toUpperCase()}
+                                      </th>
+                                    </tr>
+                                    <tr style={{ borderBottom: '1px solid #000', backgroundColor: '#F3F4F6' }}>
+                                      <th colSpan={2} style={{ borderRight: '1px solid #000', padding: '12px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center', width: '50%' }}>
+                                        EXAM DEFAULTER
+                                      </th>
+                                      <th colSpan={2} style={{ padding: '12px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center', width: '50%' }}>
+                                        EXAM TOPIC
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    <tr style={{ backgroundColor: '#FFFFFF' }}>
+                                      <td colSpan={2} style={{ borderRight: '1px solid #000', padding: '16px', fontSize: '14px', verticalAlign: 'top', minHeight: '120px', color: '#000', width: '50%' }}>
+                                        {report.absentee_list && report.absentee_list.length > 0 ? (
+                                          report.absentee_list.map((name, idx) => (
+                                            <div key={idx} style={{ color: '#EF4444', fontWeight: 'bold', marginBottom: '6px' }}>{name}</div>
+                                          ))
+                                        ) : (
+                                          <div style={{ color: '#9CA3AF', fontStyle: 'italic', textAlign: 'center' }}>None</div>
+                                        )}
+                                      </td>
+                                      <td colSpan={2} style={{ padding: '16px', fontSize: '16px', fontWeight: 'bold', verticalAlign: 'middle', textAlign: 'center', color: '#000', width: '50%' }}>
+                                        {report.chapter_covered}
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              ) : (
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'sans-serif' }}>
+                                  <thead>
+                                    <tr style={{ borderBottom: '1px solid #000' }}>
+                                      <th colSpan={2} style={{ backgroundColor: '#FFFF00', borderRight: '1px solid #000', padding: '12px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center' }}>Date</th>
+                                      <th colSpan={2} style={{ backgroundColor: '#FFFF00', padding: '12px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center' }}>{formatDateDDMMYYYY(report.date)}</th>
+                                    </tr>
+                                    <tr style={{ borderBottom: '1px solid #000' }}>
+                                      <th style={{ backgroundColor: '#FFFF00', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>Class</th>
+                                      <td style={{ backgroundColor: '#FFFF00', borderRight: '1px solid #000', padding: '10px', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%', fontWeight: 'bold' }}>{report.batch_name}</td>
+                                      <th style={{ backgroundColor: '#FFFF00', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>Subject</th>
+                                      <td style={{ backgroundColor: '#FFFF00', padding: '10px', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%', fontWeight: 'bold' }}>{report.subject_name}</td>
+                                    </tr>
+                                    <tr style={{ borderBottom: '1px solid #000' }}>
+                                      <th style={{ backgroundColor: '#8DB4E2', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>Absentee List</th>
+                                      <th style={{ backgroundColor: '#8DB4E2', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>Homework Defaulters</th>
+                                      <th style={{ backgroundColor: '#8DB4E2', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>Chapter Name</th>
+                                      <th style={{ backgroundColor: '#8DB4E2', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>HW</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    <tr style={{ backgroundColor: '#FFFFFF' }}>
+                                      <td style={{ borderRight: '1px solid #000', padding: '12px', fontSize: '13px', verticalAlign: 'top', minHeight: '80px', color: '#000' }}>
+                                        {report.absentee_list && report.absentee_list.length > 0 ? (
+                                          report.absentee_list.map((name, idx) => (
+                                            <div key={idx} style={{ color: '#EF4444', fontWeight: 'bold', marginBottom: '4px' }}>{name}</div>
+                                          ))
+                                        ) : (
+                                          <div style={{ color: '#9CA3AF', fontStyle: 'italic', textAlign: 'center' }}>None</div>
+                                        )}
+                                      </td>
+                                      <td style={{ borderRight: '1px solid #000', padding: '12px', fontSize: '13px', verticalAlign: 'top', color: '#000', textAlign: report.homework_defaulter_list && report.homework_defaulter_list.length > 0 ? 'left' : 'center' }}>
+                                        {report.homework_defaulter_list && report.homework_defaulter_list.length > 0 ? (
+                                          report.homework_defaulter_list.map((name, idx) => (
+                                            <div key={idx} style={{ fontWeight: '500', marginBottom: '4px' }}>{name}</div>
+                                          ))
+                                        ) : (
+                                          <span style={{ fontWeight: '500' }}>NULL</span>
+                                        )}
+                                      </td>
+                                      <td style={{ borderRight: '1px solid #000', padding: '12px', fontSize: '13px', verticalAlign: 'top', textAlign: 'center', color: '#000', fontWeight: '500' }}>
+                                        {report.chapter_covered}
+                                      </td>
+                                      <td style={{ padding: '12px', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
+                                        {report.homework_title ? (
+                                          <div>
+                                            <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{report.homework_title}</div>
+                                            {report.homework_description && (
+                                              <div style={{ fontSize: '12px', color: '#4B5563', whiteSpace: 'pre-line', marginBottom: '6px' }}>{report.homework_description}</div>
+                                            )}
+                                            {report.homework_due_date && (
+                                              <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#1D4ED8' }}>Due Date: {formatDateDDMMYYYY(report.homework_due_date)}</div>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <div style={{ textAlign: 'center', fontWeight: '500' }}>Not Assigned</div>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
