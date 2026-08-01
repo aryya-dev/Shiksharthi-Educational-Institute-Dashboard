@@ -34,6 +34,7 @@ interface ResultRecord {
   enrollmentId: string;
   studentCode: string;
   studentName: string;
+  batchName?: string;
   marksObtained: number | null;
   percentage: number | null;
   rank: number | null;
@@ -149,7 +150,7 @@ export default function ExamsPage() {
   // Load Results for selected exam
   useEffect(() => {
     async function loadResults() {
-      if (!selectedExam) return;
+      if (!selectedExam || !currentBranch || !currentAcademicYear) return;
 
       try {
         // 1. Fetch existing results
@@ -166,28 +167,66 @@ export default function ExamsPage() {
 
         if (resultsError) throw resultsError;
 
-        // 2. Fetch all active/on-leave enrollments for this batch
+        // 2. Fetch all active/on-leave enrollments for this branch & academic year
         const { data: dbEnrollments, error: enrollmentsError } = await supabase
           .from('enrollments')
           .select(`
             id,
+            batch_id,
             subjects_taken,
             students (
               name,
               student_code
+            ),
+            batches (
+              name
             )
           `)
-          .eq('batch_id', selectedExam.batchId)
+          .eq('branch_id', currentBranch.id)
+          .eq('academic_year_id', currentAcademicYear.id)
           .in('status', ['Active', 'Leave of Absence']);
 
         if (enrollmentsError) throw enrollmentsError;
 
-        // 3. Filter enrollments by subject name (case-insensitive substring check)
+        // Base subject normalization helper (e.g. 'Biology (Boards)', 'Biology (NEET)', 'Biology' -> 'bio')
+        const getBaseSubject = (s: string): string => {
+          if (!s) return '';
+          const lower = s.toLowerCase().trim();
+          const base = lower.split('(')[0].trim();
+          if (base.startsWith('math')) return 'math';
+          if (base.startsWith('bio')) return 'bio';
+          if (base.startsWith('phys')) return 'phys';
+          if (base.startsWith('chem')) return 'chem';
+          return base;
+        };
+
+        const examBatchId = selectedExam.batchId;
+        const examSubject = selectedExam.subjectName;
+        const examBaseSubj = getBaseSubject(examSubject);
+
+        // 3. Filter enrollments: include primary batch students, or cross-enrolled students taking this subject
         const enrolledStudents = (dbEnrollments || []).filter((e: any) => {
-          const subjects = e.subjects_taken || [];
-          return subjects.some((s: string) => 
-            s.toLowerCase().includes(selectedExam.subjectName.toLowerCase())
-          );
+          const isPrimaryBatch = e.batch_id === examBatchId;
+          const subjects: string[] = e.subjects_taken || [];
+
+          if (subjects.length > 0) {
+            const hasMatchingSubject = subjects.some((s: string) => {
+              const studentBase = getBaseSubject(s);
+              return (
+                s.toLowerCase().includes(examSubject.toLowerCase()) ||
+                examSubject.toLowerCase().includes(s.toLowerCase()) ||
+                (studentBase !== '' && studentBase === examBaseSubj)
+              );
+            });
+
+            if (hasMatchingSubject) return true;
+
+            // If it's their primary batch, include unless they explicitly excluded this base subject
+            return isPrimaryBatch && !subjects.some(s => getBaseSubject(s) === examBaseSubj);
+          }
+
+          // If subjects_taken is empty, default to primary batch enrollment
+          return isPrimaryBatch;
         });
 
         // 4. Merge results with enrollments
@@ -199,6 +238,7 @@ export default function ExamsPage() {
             enrollmentId: e.id,
             studentCode: e.students?.student_code || '',
             studentName: e.students?.name || '',
+            batchName: e.batches?.name || '',
             marksObtained: existingResult ? parseFloat(existingResult.marks_obtained) : null,
             percentage: existingResult ? parseFloat(existingResult.percentage) : null,
             rank: existingResult ? existingResult.rank_in_batch : null
@@ -732,7 +772,14 @@ export default function ExamsPage() {
                       <tr key={item.enrollmentId}>
                         <td style={{ fontWeight: '700' }}>{item.rank && item.rank > 0 ? `#${item.rank}` : '—'}</td>
                         <td style={{ fontWeight: '600', color: 'var(--primary-orange)' }}>{item.studentCode}</td>
-                        <td style={{ fontWeight: '500' }}>{item.studentName}</td>
+                        <td style={{ fontWeight: '500' }}>
+                          {item.studentName}
+                          {item.batchName && item.batchName !== selectedExam.batchName && (
+                            <span className="badge badge-info" style={{ marginLeft: '6px', fontSize: '10px' }}>
+                              {item.batchName}
+                            </span>
+                          )}
+                        </td>
                         <td>
                           {isEditingMarks ? (
                             <input
