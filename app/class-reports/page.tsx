@@ -469,20 +469,20 @@ export default function ClassReportsPage() {
     if (!printWindow) return;
 
     const absenteesHtml = report.absentee_list && report.absentee_list.length > 0 
-      ? report.absentee_list.map((name: string) => `<div style="color: red; font-weight: bold; margin-bottom: 4px;">${name}</div>`).join('')
-      : '<div style="color: #9CA3AF; font-style: italic; text-align: center;">None</div>';
+      ? report.absentee_list.map((name: string) => `<div style="color: red; font-weight: bold; margin-bottom: 5px; font-size: 15px;">${name}</div>`).join('')
+      : '<div style="color: #9CA3AF; font-style: italic; text-align: center; font-size: 14px;">None</div>';
 
     const defaultersHtml = report.homework_defaulter_list && report.homework_defaulter_list.length > 0
-      ? report.homework_defaulter_list.map((name: string) => `<div style="margin-bottom: 4px; font-weight: 500;">${name}</div>`).join('')
-      : '<span style="font-weight: 500;">NULL</span>';
+      ? report.homework_defaulter_list.map((name: string) => `<div style="margin-bottom: 5px; font-weight: 600; font-size: 15px;">${name}</div>`).join('')
+      : '<span style="font-weight: 500; font-size: 14px;">NULL</span>';
 
     const hwHtml = report.homework_title 
       ? `<div>
-          <div style="font-weight: bold; margin-bottom: 4px;">${report.homework_title}</div>
-          ${report.homework_description ? `<div style="font-size: 12px; color: #374151; white-space: pre-line; margin-bottom: 6px;">${report.homework_description}</div>` : ''}
-          ${report.homework_due_date ? `<div style="font-size: 11px; font-weight: bold; color: #1D4ED8;">Due Date: ${formatDateDDMMYYYY(report.homework_due_date)}</div>` : ''}
+          <div style="font-weight: bold; margin-bottom: 5px; font-size: 15px;">${report.homework_title}</div>
+          ${report.homework_description ? `<div style="font-size: 13px; color: #374151; white-space: pre-line; margin-bottom: 6px;">${report.homework_description}</div>` : ''}
+          ${report.homework_due_date ? `<div style="font-size: 12px; font-weight: bold; color: #1D4ED8;">Due Date: ${formatDateDDMMYYYY(report.homework_due_date)}</div>` : ''}
          </div>`
-      : '<div style="text-align: center; font-weight: 500;">Not Assigned</div>';
+      : '<div style="text-align: center; font-weight: 500; font-size: 14px;">Not Assigned</div>';
     
     printWindow.document.write(`
       <!DOCTYPE html>
@@ -490,21 +490,21 @@ export default function ClassReportsPage() {
       <head>
         <title>Class Report - ${report.batch_name} ${report.subject_name} ${report.date}</title>
         <style>
-          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
           body { font-family: 'Inter', sans-serif; padding: 40px; color: #1F2937; max-width: 800px; margin: 0 auto; }
           .logo-container { text-align: center; margin-bottom: 16px; }
-          .logo-container img { max-height: 55px; object-fit: contain; }
-          h2 { text-align: center; font-size: 18px; font-weight: 700; margin-bottom: 20px; text-transform: none; letter-spacing: 0.5px; }
+          .logo-container img { max-height: 60px; object-fit: contain; }
+          h2 { text-align: center; font-size: 20px; font-weight: 800; margin-bottom: 20px; text-transform: none; letter-spacing: 0.5px; }
           
-          .meta-section { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 13px; }
+          .meta-section { display: flex; justify-content: space-between; margin-bottom: 20px; font-size: 14px; }
           .meta-col { display: flex; flex-direction: column; gap: 4px; }
           .meta-row { display: flex; }
-          .meta-label { font-weight: 700; color: #374151; width: 100px; }
-          .meta-value { color: #1F2937; }
+          .meta-label { font-weight: 700; color: #374151; width: 110px; }
+          .meta-value { color: #1F2937; font-weight: 600; }
 
           table { width: 100%; border-collapse: collapse; border: 1px solid #000; margin: 20px 0; }
           tr { border-bottom: 1px solid #000; }
-          th, td { border-right: 1px solid #000; padding: 12px; font-size: 14px; }
+          th, td { border-right: 1px solid #000; padding: 12px; font-size: 15px; }
           th:last-child, td:last-child { border-right: none; }
           
           .bg-yellow { background-color: #FFFF00; }
@@ -514,7 +514,7 @@ export default function ClassReportsPage() {
           .text-bold { font-weight: bold; }
           .text-center { text-align: center; }
           
-          .footer { text-align: center; font-size: 10px; color: #9CA3AF; margin-top: 40px; }
+          .footer { text-align: center; font-size: 11px; color: #9CA3AF; margin-top: 40px; }
           @media print { body { padding: 20px; } }
         </style>
       </head>
@@ -599,9 +599,9 @@ export default function ClassReportsPage() {
       <div className="card" style={{ margin: 0, padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <FileText size={20} style={{ color: 'var(--primary-orange)' }} />
-            <h3 style={{ fontSize: '16px' }}>Daily Class Reports</h3>
-            <span style={{ fontSize: '12px', color: 'var(--text-secondary)', fontWeight: '500', padding: '2px 10px', borderRadius: '100px', backgroundColor: 'var(--surface-secondary)' }}>
+            <FileText size={24} style={{ color: 'var(--primary-orange)' }} />
+            <h3 style={{ fontSize: '20px', fontWeight: '700' }}>Daily Class Reports</h3>
+            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: '600', padding: '3px 12px', borderRadius: '100px', backgroundColor: 'var(--surface-secondary)' }}>
               {reports.length} report{reports.length !== 1 ? 's' : ''}
             </span>
           </div>
@@ -609,18 +609,18 @@ export default function ClassReportsPage() {
             {hasActiveFilters && (
               <button
                 className="btn btn-secondary"
-                style={{ padding: '6px 12px', minHeight: '36px', fontSize: '12px', gap: '4px' }}
+                style={{ padding: '6px 12px', minHeight: '36px', fontSize: '13px', gap: '4px' }}
                 onClick={clearFilters}
               >
-                <RotateCcw size={12} /> Clear
+                <RotateCcw size={14} /> Clear
               </button>
             )}
             <button
               className="btn btn-secondary"
-              style={{ padding: '6px 12px', minHeight: '36px', fontSize: '12px', gap: '4px' }}
+              style={{ padding: '6px 12px', minHeight: '36px', fontSize: '13px', gap: '4px' }}
               onClick={() => setShowFilters(!showFilters)}
             >
-              <Filter size={12} />
+              <Filter size={14} />
               Filters
               {hasActiveFilters && (
                 <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--primary-orange)' }} />
@@ -632,26 +632,26 @@ export default function ClassReportsPage() {
         {showFilters && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '12px', padding: '12px 0 0', borderTop: '1px solid var(--border-color)' }}>
             <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label" style={{ fontSize: '11px' }}>Date</label>
-              <input type="date" className="form-control" value={filterDate} onChange={e => setFilterDate(e.target.value)} />
+              <label className="form-label" style={{ fontSize: '12px', fontWeight: '600' }}>Date</label>
+              <input type="date" className="form-control" style={{ fontSize: '13px' }} value={filterDate} onChange={e => setFilterDate(e.target.value)} />
             </div>
             <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label" style={{ fontSize: '11px' }}>Batch</label>
-              <select className="form-control" value={filterBatch} onChange={e => setFilterBatch(e.target.value)}>
+              <label className="form-label" style={{ fontSize: '12px', fontWeight: '600' }}>Batch</label>
+              <select className="form-control" style={{ fontSize: '13px' }} value={filterBatch} onChange={e => setFilterBatch(e.target.value)}>
                 <option value="">All Batches</option>
                 {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
             <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label" style={{ fontSize: '11px' }}>Faculty</label>
-              <select className="form-control" value={filterFaculty} onChange={e => setFilterFaculty(e.target.value)}>
+              <label className="form-label" style={{ fontSize: '12px', fontWeight: '600' }}>Faculty</label>
+              <select className="form-control" style={{ fontSize: '13px' }} value={filterFaculty} onChange={e => setFilterFaculty(e.target.value)}>
                 <option value="">All Faculty</option>
                 {facultyList.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
               </select>
             </div>
             <div className="form-group" style={{ margin: 0 }}>
-              <label className="form-label" style={{ fontSize: '11px' }}>Subject</label>
-              <select className="form-control" value={filterSubject} onChange={e => setFilterSubject(e.target.value)}>
+              <label className="form-label" style={{ fontSize: '12px', fontWeight: '600' }}>Subject</label>
+              <select className="form-control" style={{ fontSize: '13px' }} value={filterSubject} onChange={e => setFilterSubject(e.target.value)}>
                 <option value="">All Subjects</option>
                 <option value="Physics">Physics</option>
                 <option value="Chemistry">Chemistry</option>
@@ -666,14 +666,14 @@ export default function ClassReportsPage() {
 
       {/* Reports List grouped by Date */}
       {loading ? (
-        <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '14px' }}>
+        <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '15px' }}>
           Loading reports...
         </div>
       ) : reports.length === 0 ? (
         <div className="card" style={{ margin: 0, padding: '48px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-          <FileText size={40} style={{ color: 'var(--text-secondary)', opacity: 0.3 }} />
-          <p style={{ color: 'var(--text-secondary)', fontSize: '15px' }}>No class reports found</p>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+          <FileText size={44} style={{ color: 'var(--text-secondary)', opacity: 0.3 }} />
+          <p style={{ color: 'var(--text-secondary)', fontSize: '16px', fontWeight: '600' }}>No class reports found</p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
             {hasActiveFilters ? 'Try adjusting your filters.' : 'Reports are generated automatically when a class is completed.'}
           </p>
         </div>
@@ -682,12 +682,12 @@ export default function ClassReportsPage() {
           {groupedReports.map(group => (
             <div key={group.date} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               {/* Date Sub-section Header */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 12px', backgroundColor: 'var(--surface-secondary)', borderRadius: 'var(--radius-sm)', borderLeft: '4px solid var(--primary-orange)' }}>
-                <Calendar size={16} style={{ color: 'var(--primary-orange)' }} />
-                <h4 style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 14px', backgroundColor: 'var(--surface-secondary)', borderRadius: 'var(--radius-sm)', borderLeft: '4px solid var(--primary-orange)' }}>
+                <Calendar size={18} style={{ color: 'var(--primary-orange)' }} />
+                <h4 style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)', margin: 0 }}>
                   {formatDate(group.date)}
                 </h4>
-                <span style={{ fontSize: '11px', fontWeight: '600', padding: '2px 8px', borderRadius: '100px', backgroundColor: 'var(--surface-card)', color: 'var(--text-secondary)' }}>
+                <span style={{ fontSize: '12px', fontWeight: '600', padding: '2px 10px', borderRadius: '100px', backgroundColor: 'var(--surface-card)', color: 'var(--text-secondary)' }}>
                   {group.reports.length} report{group.reports.length !== 1 ? 's' : ''}
                 </span>
               </div>
@@ -719,8 +719,8 @@ export default function ClassReportsPage() {
                       >
                         {/* Date Badge */}
                         <div style={{
-                          width: '52px',
-                          height: '52px',
+                          width: '56px',
+                          height: '56px',
                           borderRadius: 'var(--radius-sm)',
                           backgroundColor: 'var(--surface-secondary)',
                           display: 'flex',
@@ -729,53 +729,53 @@ export default function ClassReportsPage() {
                           justifyContent: 'center',
                           flexShrink: 0
                         }}>
-                          <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--primary-orange)', lineHeight: '1.1' }}>
+                          <span style={{ fontSize: '18px', fontWeight: '700', color: 'var(--primary-orange)', lineHeight: '1.1' }}>
                             {new Date(report.date + 'T00:00:00').getDate()}
                           </span>
-                          <span style={{ fontSize: '9px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
+                          <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
                             {new Date(report.date + 'T00:00:00').toLocaleDateString('en-IN', { month: 'short' })}
                           </span>
                         </div>
 
                         {/* Info */}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '4px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '100px', backgroundColor: '#E2E8F0', color: 'var(--text-primary)' }}>
+                          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '12px', fontWeight: '700', padding: '3px 10px', borderRadius: '100px', backgroundColor: '#E2E8F0', color: 'var(--text-primary)' }}>
                               {report.batch_name}
                             </span>
-                            <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-primary)' }}>
+                            <span style={{ fontSize: '16px', fontWeight: '700', color: 'var(--text-primary)' }}>
                               {report.subject_name}
                             </span>
                             {report.is_exam && (
-                              <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 8px', borderRadius: '100px', backgroundColor: '#F3E8FF', color: '#7E22CE' }}>
+                              <span style={{ fontSize: '11px', fontWeight: '700', padding: '3px 10px', borderRadius: '100px', backgroundColor: '#F3E8FF', color: '#7E22CE' }}>
                                 Exam
                               </span>
                             )}
                           </div>
-                          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                              <Clock size={10} />{formatTime(report.start_time)} – {formatTime(report.end_time)}
+                          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '5px', fontWeight: '500' }}>
+                              <Clock size={14} />{formatTime(report.start_time)} – {formatTime(report.end_time)}
                             </span>
-                            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                              <User size={10} />{report.faculty_name}
+                            <span style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '5px', fontWeight: '500' }}>
+                              <User size={14} />{report.faculty_name}
                             </span>
                           </div>
                         </div>
 
                         {/* Attendance Bar */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-                          <div style={{ width: '80px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px' }}>
-                              <span style={{ fontSize: '11px', fontWeight: '600', color: attPct >= 75 ? '#065F46' : attPct >= 50 ? '#92400E' : '#DC2626' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+                          <div style={{ width: '90px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '700', color: attPct >= 75 ? '#065F46' : attPct >= 50 ? '#92400E' : '#DC2626' }}>
                                 {attPct}%
                               </span>
-                              <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>{report.present_count}/{totalStudents}</span>
+                              <span style={{ fontSize: '12px', fontWeight: '500', color: 'var(--text-secondary)' }}>{report.present_count}/{totalStudents}</span>
                             </div>
-                            <div style={{ height: '4px', borderRadius: '2px', backgroundColor: '#E5E7EB', overflow: 'hidden' }}>
+                            <div style={{ height: '6px', borderRadius: '3px', backgroundColor: '#E5E7EB', overflow: 'hidden' }}>
                               <div style={{
                                 height: '100%',
                                 width: `${attPct}%`,
-                                borderRadius: '2px',
+                                borderRadius: '3px',
                                 backgroundColor: attPct >= 75 ? '#10B981' : attPct >= 50 ? '#F59E0B' : '#EF4444',
                                 transition: 'width 0.3s'
                               }} />
@@ -784,12 +784,12 @@ export default function ClassReportsPage() {
 
                           {/* Homework indicator */}
                           {report.homework_title ? (
-                            <span style={{ fontSize: '9px', fontWeight: '600', padding: '2px 6px', borderRadius: '100px', backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>HW</span>
+                            <span style={{ fontSize: '11px', fontWeight: '700', padding: '3px 8px', borderRadius: '100px', backgroundColor: '#DBEAFE', color: '#1D4ED8' }}>HW</span>
                           ) : (
-                            <span style={{ fontSize: '9px', fontWeight: '600', padding: '2px 6px', borderRadius: '100px', backgroundColor: '#F3F4F6', color: '#9CA3AF' }}>—</span>
+                            <span style={{ fontSize: '11px', fontWeight: '600', padding: '3px 8px', borderRadius: '100px', backgroundColor: '#F3F4F6', color: '#9CA3AF' }}>—</span>
                           )}
 
-                          {isExpanded ? <ChevronUp size={16} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={16} style={{ color: 'var(--text-secondary)' }} />}
+                          {isExpanded ? <ChevronUp size={20} style={{ color: 'var(--text-secondary)' }} /> : <ChevronDown size={20} style={{ color: 'var(--text-secondary)' }} />}
                         </div>
                       </button>
 
@@ -802,18 +802,18 @@ export default function ClassReportsPage() {
                             <button
                               type="button"
                               className="btn btn-secondary"
-                              style={{ padding: '6px 14px', minHeight: '36px', fontSize: '12px', gap: '6px' }}
+                              style={{ padding: '6px 14px', minHeight: '36px', fontSize: '13px', gap: '6px', fontWeight: '600' }}
                               onClick={() => generatePDF(report)}
                             >
-                              <Download size={14} /> Download PDF
+                              <Download size={15} /> Download PDF
                             </button>
                             <button
                               type="button"
                               className="btn btn-secondary"
-                              style={{ padding: '6px 14px', minHeight: '36px', fontSize: '12px', gap: '6px' }}
+                              style={{ padding: '6px 14px', minHeight: '36px', fontSize: '13px', gap: '6px', fontWeight: '600' }}
                               onClick={() => handlePrint(report)}
                             >
-                              <Printer size={14} /> Print
+                              <Printer size={15} /> Print
                             </button>
                           </div>
 
@@ -824,29 +824,29 @@ export default function ClassReportsPage() {
                               <img 
                                 src="/logo.png" 
                                 alt="Shiksharthi Logo" 
-                                style={{ maxHeight: '52px', objectFit: 'contain' }} 
+                                style={{ maxHeight: '56px', objectFit: 'contain' }} 
                               />
                             </div>
                             
-                            <h4 style={{ textAlign: 'center', fontSize: '14px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--text-primary)', marginBottom: '8px', letterSpacing: '0.05em' }}>Daily Class Report</h4>
+                            <h4 style={{ textAlign: 'center', fontSize: '16px', fontWeight: '800', textTransform: 'uppercase', color: 'var(--text-primary)', marginBottom: '8px', letterSpacing: '0.05em' }}>Daily Class Report</h4>
 
                             {/* Class Info Grid */}
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', padding: '16px', backgroundColor: '#F8FAFC', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
                               <div>
-                                <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>Faculty</span>
-                                <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', marginTop: '2px' }}>{report.faculty_name}</p>
+                                <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Faculty</span>
+                                <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', marginTop: '2px' }}>{report.faculty_name}</p>
                               </div>
                               <div>
-                                <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>Time</span>
-                                <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', marginTop: '2px' }}>{formatTime(report.start_time)} – {formatTime(report.end_time)}</p>
+                                <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Time</span>
+                                <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', marginTop: '2px' }}>{formatTime(report.start_time)} – {formatTime(report.end_time)}</p>
                               </div>
                               <div>
-                                <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>Attendance Breakdown</span>
-                                <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', marginTop: '2px' }}>P: {report.present_count} | A: {report.absent_count} | L: {report.leave_count}</p>
+                                <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Attendance Breakdown</span>
+                                <p style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text-primary)', marginTop: '2px' }}>P: {report.present_count} | A: {report.absent_count} | L: {report.leave_count}</p>
                               </div>
                               <div>
-                                <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-secondary)' }}>Attendance %</span>
-                                <p style={{ fontSize: '14px', fontWeight: '700', color: attPct >= 75 ? '#10B981' : attPct >= 50 ? '#F59E0B' : '#EF4444', marginTop: '2px' }}>{attPct}%</p>
+                                <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>Attendance %</span>
+                                <p style={{ fontSize: '15px', fontWeight: '800', color: attPct >= 75 ? '#10B981' : attPct >= 50 ? '#F59E0B' : '#EF4444', marginTop: '2px' }}>{attPct}%</p>
                               </div>
                             </div>
 
@@ -856,25 +856,25 @@ export default function ClassReportsPage() {
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'sans-serif' }}>
                                   <thead>
                                     <tr style={{ borderBottom: '1px solid #000', backgroundColor: '#F3F4F6' }}>
-                                      <th colSpan={2} style={{ borderRight: '1px solid #000', padding: '12px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center', width: '50%' }}>
+                                      <th colSpan={2} style={{ borderRight: '1px solid #000', padding: '12px', fontWeight: 'bold', fontSize: '15px', color: '#000', textAlign: 'center', width: '50%' }}>
                                         BATCH- {report.batch_name.toUpperCase()}
                                       </th>
-                                      <th colSpan={2} style={{ padding: '12px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center', width: '50%' }}>
+                                      <th colSpan={2} style={{ padding: '12px', fontWeight: 'bold', fontSize: '15px', color: '#000', textAlign: 'center', width: '50%' }}>
                                         SUB- {report.subject_name.toUpperCase()}
                                       </th>
                                     </tr>
                                     <tr style={{ borderBottom: '1px solid #000', backgroundColor: '#F3F4F6' }}>
-                                      <th colSpan={2} style={{ borderRight: '1px solid #000', padding: '12px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center', width: '50%' }}>
+                                      <th colSpan={2} style={{ borderRight: '1px solid #000', padding: '12px', fontWeight: 'bold', fontSize: '15px', color: '#000', textAlign: 'center', width: '50%' }}>
                                         EXAM DEFAULTER
                                       </th>
-                                      <th colSpan={2} style={{ padding: '12px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center', width: '50%' }}>
+                                      <th colSpan={2} style={{ padding: '12px', fontWeight: 'bold', fontSize: '15px', color: '#000', textAlign: 'center', width: '50%' }}>
                                         EXAM TOPIC
                                       </th>
                                     </tr>
                                   </thead>
                                   <tbody>
                                     <tr style={{ backgroundColor: '#FFFFFF' }}>
-                                      <td colSpan={2} style={{ borderRight: '1px solid #000', padding: '16px', fontSize: '14px', verticalAlign: 'top', minHeight: '120px', color: '#000', width: '50%' }}>
+                                      <td colSpan={2} style={{ borderRight: '1px solid #000', padding: '16px', fontSize: '15px', verticalAlign: 'top', minHeight: '120px', color: '#000', width: '50%' }}>
                                         {report.absentee_list && report.absentee_list.length > 0 ? (
                                           report.absentee_list.map((name, idx) => (
                                             <div key={idx} style={{ color: '#EF4444', fontWeight: 'bold', marginBottom: '6px' }}>{name}</div>
@@ -883,7 +883,7 @@ export default function ClassReportsPage() {
                                           <div style={{ color: '#9CA3AF', fontStyle: 'italic', textAlign: 'center' }}>None</div>
                                         )}
                                       </td>
-                                      <td colSpan={2} style={{ padding: '16px', fontSize: '16px', fontWeight: 'bold', verticalAlign: 'middle', textAlign: 'center', color: '#000', width: '50%' }}>
+                                      <td colSpan={2} style={{ padding: '16px', fontSize: '17px', fontWeight: 'bold', verticalAlign: 'middle', textAlign: 'center', color: '#000', width: '50%' }}>
                                         {report.chapter_covered}
                                       </td>
                                     </tr>
@@ -893,25 +893,25 @@ export default function ClassReportsPage() {
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'sans-serif' }}>
                                   <thead>
                                     <tr style={{ borderBottom: '1px solid #000' }}>
-                                      <th colSpan={2} style={{ backgroundColor: '#FFFF00', borderRight: '1px solid #000', padding: '12px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center' }}>Date</th>
-                                      <th colSpan={2} style={{ backgroundColor: '#FFFF00', padding: '12px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center' }}>{formatDateDDMMYYYY(report.date)}</th>
+                                      <th colSpan={2} style={{ backgroundColor: '#FFFF00', borderRight: '1px solid #000', padding: '12px', fontWeight: 'bold', fontSize: '15px', color: '#000', textAlign: 'center' }}>Date</th>
+                                      <th colSpan={2} style={{ backgroundColor: '#FFFF00', padding: '12px', fontWeight: 'bold', fontSize: '15px', color: '#000', textAlign: 'center' }}>{formatDateDDMMYYYY(report.date)}</th>
                                     </tr>
                                     <tr style={{ borderBottom: '1px solid #000' }}>
-                                      <th style={{ backgroundColor: '#FFFF00', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>Class</th>
-                                      <td style={{ backgroundColor: '#FFFF00', borderRight: '1px solid #000', padding: '10px', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%', fontWeight: 'bold' }}>{report.batch_name}</td>
-                                      <th style={{ backgroundColor: '#FFFF00', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>Subject</th>
-                                      <td style={{ backgroundColor: '#FFFF00', padding: '10px', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%', fontWeight: 'bold' }}>{report.subject_name}</td>
+                                      <th style={{ backgroundColor: '#FFFF00', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center', width: '25%' }}>Class</th>
+                                      <td style={{ backgroundColor: '#FFFF00', borderRight: '1px solid #000', padding: '10px', fontSize: '14px', color: '#000', textAlign: 'center', width: '25%', fontWeight: 'bold' }}>{report.batch_name}</td>
+                                      <th style={{ backgroundColor: '#FFFF00', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center', width: '25%' }}>Subject</th>
+                                      <td style={{ backgroundColor: '#FFFF00', padding: '10px', fontSize: '14px', color: '#000', textAlign: 'center', width: '25%', fontWeight: 'bold' }}>{report.subject_name}</td>
                                     </tr>
                                     <tr style={{ borderBottom: '1px solid #000' }}>
-                                      <th style={{ backgroundColor: '#8DB4E2', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>Absentee List</th>
-                                      <th style={{ backgroundColor: '#8DB4E2', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>Homework Defaulters</th>
-                                      <th style={{ backgroundColor: '#8DB4E2', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>Chapter Name</th>
-                                      <th style={{ backgroundColor: '#8DB4E2', padding: '10px', fontWeight: 'bold', fontSize: '13px', color: '#000', textAlign: 'center', width: '25%' }}>HW</th>
+                                      <th style={{ backgroundColor: '#8DB4E2', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center', width: '25%' }}>Absentee List</th>
+                                      <th style={{ backgroundColor: '#8DB4E2', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center', width: '25%' }}>Homework Defaulters</th>
+                                      <th style={{ backgroundColor: '#8DB4E2', borderRight: '1px solid #000', padding: '10px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center', width: '25%' }}>Chapter Name</th>
+                                      <th style={{ backgroundColor: '#8DB4E2', padding: '10px', fontWeight: 'bold', fontSize: '14px', color: '#000', textAlign: 'center', width: '25%' }}>HW</th>
                                     </tr>
                                   </thead>
                                   <tbody>
                                     <tr style={{ backgroundColor: '#FFFFFF' }}>
-                                      <td style={{ borderRight: '1px solid #000', padding: '12px', fontSize: '13px', verticalAlign: 'top', minHeight: '80px', color: '#000' }}>
+                                      <td style={{ borderRight: '1px solid #000', padding: '12px', fontSize: '14px', verticalAlign: 'top', minHeight: '80px', color: '#000' }}>
                                         {report.absentee_list && report.absentee_list.length > 0 ? (
                                           report.absentee_list.map((name, idx) => (
                                             <div key={idx} style={{ color: '#EF4444', fontWeight: 'bold', marginBottom: '4px' }}>{name}</div>
@@ -920,27 +920,27 @@ export default function ClassReportsPage() {
                                           <div style={{ color: '#9CA3AF', fontStyle: 'italic', textAlign: 'center' }}>None</div>
                                         )}
                                       </td>
-                                      <td style={{ borderRight: '1px solid #000', padding: '12px', fontSize: '13px', verticalAlign: 'top', color: '#000', textAlign: report.homework_defaulter_list && report.homework_defaulter_list.length > 0 ? 'left' : 'center' }}>
+                                      <td style={{ borderRight: '1px solid #000', padding: '12px', fontSize: '14px', verticalAlign: 'top', color: '#000', textAlign: report.homework_defaulter_list && report.homework_defaulter_list.length > 0 ? 'left' : 'center' }}>
                                         {report.homework_defaulter_list && report.homework_defaulter_list.length > 0 ? (
                                           report.homework_defaulter_list.map((name, idx) => (
-                                            <div key={idx} style={{ fontWeight: '500', marginBottom: '4px' }}>{name}</div>
+                                            <div key={idx} style={{ fontWeight: '600', marginBottom: '4px' }}>{name}</div>
                                           ))
                                         ) : (
                                           <span style={{ fontWeight: '500' }}>NULL</span>
                                         )}
                                       </td>
-                                      <td style={{ borderRight: '1px solid #000', padding: '12px', fontSize: '13px', verticalAlign: 'top', textAlign: 'center', color: '#000', fontWeight: '500' }}>
+                                      <td style={{ borderRight: '1px solid #000', padding: '12px', fontSize: '14px', verticalAlign: 'top', textAlign: 'center', color: '#000', fontWeight: '600' }}>
                                         {report.chapter_covered}
                                       </td>
-                                      <td style={{ padding: '12px', fontSize: '13px', verticalAlign: 'top', color: '#000' }}>
+                                      <td style={{ padding: '12px', fontSize: '14px', verticalAlign: 'top', color: '#000' }}>
                                         {report.homework_title ? (
                                           <div>
                                             <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{report.homework_title}</div>
                                             {report.homework_description && (
-                                              <div style={{ fontSize: '12px', color: '#4B5563', whiteSpace: 'pre-line', marginBottom: '6px' }}>{report.homework_description}</div>
+                                              <div style={{ fontSize: '13px', color: '#4B5563', whiteSpace: 'pre-line', marginBottom: '6px' }}>{report.homework_description}</div>
                                             )}
                                             {report.homework_due_date && (
-                                              <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#1D4ED8' }}>Due Date: {formatDateDDMMYYYY(report.homework_due_date)}</div>
+                                              <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#1D4ED8' }}>Due Date: {formatDateDDMMYYYY(report.homework_due_date)}</div>
                                             )}
                                           </div>
                                         ) : (
