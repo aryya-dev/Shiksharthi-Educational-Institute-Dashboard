@@ -34,7 +34,6 @@ interface ResultRecord {
   enrollmentId: string;
   studentCode: string;
   studentName: string;
-  batchName?: string;
   marksObtained: number | null;
   percentage: number | null;
   rank: number | null;
@@ -167,98 +166,31 @@ export default function ExamsPage() {
 
         if (resultsError) throw resultsError;
 
-        // 2. Fetch all active/on-leave enrollments for this branch & academic year
+        // 2. Fetch all active/on-leave enrollments strictly for this batch
         const { data: dbEnrollments, error: enrollmentsError } = await supabase
           .from('enrollments')
           .select(`
             id,
-            batch_id,
             subjects_taken,
             students (
               name,
               student_code
-            ),
-            batches (
-              name,
-              class
             )
           `)
-          .eq('branch_id', currentBranch.id)
-          .eq('academic_year_id', currentAcademicYear.id)
+          .eq('batch_id', selectedExam.batchId)
           .in('status', ['Active', 'Leave of Absence']);
 
         if (enrollmentsError) throw enrollmentsError;
 
-        // Class level extraction helper (e.g. '11' or '12')
-        const getClassLevel = (batchClass?: string, batchName?: string): string => {
-          const str = `${batchClass || ''} ${batchName || ''}`.trim();
-          const match = str.match(/\b(11|12|7|8|9|10)\b/);
-          return match ? match[1] : '';
-        };
-
-        const examBatchId = selectedExam.batchId;
-        const examSubject = selectedExam.subjectName;
-        const examSubjectLower = examSubject.toLowerCase();
-        const examClassLevel = getClassLevel('', selectedExam.batchName);
-
-        // Is this a Biology exam?
-        const isBiologyExam = examSubjectLower.includes('bio');
-
-        // If Biology, determine which variant the exam is for
-        // "Biology (Board)" / "Biology (Boards)" → boardType
-        // "Biology (NEET)" / "Biology" on a NEET batch / "Biology (Core)" → neetType
-        const isBiologyBoard = isBiologyExam && examSubjectLower.includes('board');
-        const isBiologyNeet  = isBiologyExam && (examSubjectLower.includes('neet') || examSubjectLower.includes('core'));
-
-        // 3. Filter enrollments
+        // 3. Filter enrollments by subject (if subjects_taken is specified)
         const enrolledStudents = (dbEnrollments || []).filter((e: any) => {
-          const studentClassLevel = getClassLevel(e.batches?.class, e.batches?.name);
-
-          // Class level isolation: never mix Class 11 and Class 12
-          if (examClassLevel && studentClassLevel && examClassLevel !== studentClassLevel) {
-            return false;
-          }
-
           const subjects: string[] = e.subjects_taken || [];
-          const isPrimaryBatch = e.batch_id === examBatchId;
-
-          if (isBiologyExam) {
-            // ── Biology exams: exact variant match required ──────────────────
-            // Check if student has ANY subject_taken entry that matches this Biology variant
-            const hasBiologySubject = subjects.some((s: string) => {
-              const sl = s.toLowerCase();
-              if (!sl.includes('bio')) return false;
-
-              if (isBiologyBoard) {
-                // Boards Biology: must have "board" in the subject
-                return sl.includes('board');
-              } else if (isBiologyNeet) {
-                // NEET Biology: must have "neet" or "core" in the subject
-                return sl.includes('neet') || sl.includes('core');
-              } else {
-                // Generic "Biology" exam with no variant qualifier:
-                // only include from primary batch (no variant specified, so we can't cross-match)
-                return isPrimaryBatch;
-              }
-            });
-
-            if (hasBiologySubject) return true;
-
-            // Primary batch student whose subjects_taken is empty → include (they're fully in this batch)
-            if (isPrimaryBatch && subjects.length === 0) return true;
-
-            // Primary batch student who has subjects but none are biology → include
-            // (biology wasn't listed as additional, they just attend the primary batch)
-            if (isPrimaryBatch && !subjects.some(s => s.toLowerCase().includes('bio'))) return true;
-
-            return false;
-
-          } else {
-            // ── Non-biology exams: primary batch only ────────────────────────
-            return isPrimaryBatch;
-          }
+          if (subjects.length === 0) return true;
+          return subjects.some((s: string) => 
+            s.toLowerCase().includes(selectedExam.subjectName.toLowerCase()) ||
+            selectedExam.subjectName.toLowerCase().includes(s.toLowerCase())
+          );
         });
-
 
         // 4. Merge results with enrollments
         const mergedResults: ResultRecord[] = enrolledStudents.map((e: any) => {
@@ -269,7 +201,6 @@ export default function ExamsPage() {
             enrollmentId: e.id,
             studentCode: e.students?.student_code || '',
             studentName: e.students?.name || '',
-            batchName: e.batches?.name || '',
             marksObtained: existingResult ? parseFloat(existingResult.marks_obtained) : null,
             percentage: existingResult ? parseFloat(existingResult.percentage) : null,
             rank: existingResult ? existingResult.rank_in_batch : null
@@ -803,14 +734,7 @@ export default function ExamsPage() {
                       <tr key={item.enrollmentId}>
                         <td style={{ fontWeight: '700' }}>{item.rank && item.rank > 0 ? `#${item.rank}` : '—'}</td>
                         <td style={{ fontWeight: '600', color: 'var(--primary-orange)' }}>{item.studentCode}</td>
-                        <td style={{ fontWeight: '500' }}>
-                          {item.studentName}
-                          {item.batchName && item.batchName !== selectedExam.batchName && (
-                            <span className="badge badge-info" style={{ marginLeft: '6px', fontSize: '10px' }}>
-                              {item.batchName}
-                            </span>
-                          )}
-                        </td>
+                        <td style={{ fontWeight: '500' }}>{item.studentName}</td>
                         <td>
                           {isEditingMarks ? (
                             <input
