@@ -189,18 +189,6 @@ export default function ExamsPage() {
 
         if (enrollmentsError) throw enrollmentsError;
 
-        // Base subject normalization helper (e.g. 'Biology (Boards)', 'Biology (NEET)', 'Biology' -> 'bio')
-        const getBaseSubject = (s: string): string => {
-          if (!s) return '';
-          const lower = s.toLowerCase().trim();
-          const base = lower.split('(')[0].trim();
-          if (base.startsWith('math')) return 'math';
-          if (base.startsWith('bio')) return 'bio';
-          if (base.startsWith('phys')) return 'phys';
-          if (base.startsWith('chem')) return 'chem';
-          return base;
-        };
-
         // Class level extraction helper (e.g. '11' or '12')
         const getClassLevel = (batchClass?: string, batchName?: string): string => {
           const str = `${batchClass || ''} ${batchName || ''}`.trim();
@@ -210,40 +198,67 @@ export default function ExamsPage() {
 
         const examBatchId = selectedExam.batchId;
         const examSubject = selectedExam.subjectName;
-        const examBaseSubj = getBaseSubject(examSubject);
+        const examSubjectLower = examSubject.toLowerCase();
         const examClassLevel = getClassLevel('', selectedExam.batchName);
 
-        // 3. Filter enrollments: include primary batch students, or cross-enrolled students of the same class taking this subject
+        // Is this a Biology exam?
+        const isBiologyExam = examSubjectLower.includes('bio');
+
+        // If Biology, determine which variant the exam is for
+        // "Biology (Board)" / "Biology (Boards)" → boardType
+        // "Biology (NEET)" / "Biology" on a NEET batch / "Biology (Core)" → neetType
+        const isBiologyBoard = isBiologyExam && examSubjectLower.includes('board');
+        const isBiologyNeet  = isBiologyExam && (examSubjectLower.includes('neet') || examSubjectLower.includes('core'));
+
+        // 3. Filter enrollments
         const enrolledStudents = (dbEnrollments || []).filter((e: any) => {
-          const isPrimaryBatch = e.batch_id === examBatchId;
           const studentClassLevel = getClassLevel(e.batches?.class, e.batches?.name);
 
-          // Class level isolation: Class 12 students can NEVER appear in Class 11 exams & vice-versa
+          // Class level isolation: never mix Class 11 and Class 12
           if (examClassLevel && studentClassLevel && examClassLevel !== studentClassLevel) {
             return false;
           }
 
           const subjects: string[] = e.subjects_taken || [];
+          const isPrimaryBatch = e.batch_id === examBatchId;
 
-          if (subjects.length > 0) {
-            const hasMatchingSubject = subjects.some((s: string) => {
-              const studentBase = getBaseSubject(s);
-              return (
-                s.toLowerCase().includes(examSubject.toLowerCase()) ||
-                examSubject.toLowerCase().includes(s.toLowerCase()) ||
-                (studentBase !== '' && studentBase === examBaseSubj)
-              );
+          if (isBiologyExam) {
+            // ── Biology exams: exact variant match required ──────────────────
+            // Check if student has ANY subject_taken entry that matches this Biology variant
+            const hasBiologySubject = subjects.some((s: string) => {
+              const sl = s.toLowerCase();
+              if (!sl.includes('bio')) return false;
+
+              if (isBiologyBoard) {
+                // Boards Biology: must have "board" in the subject
+                return sl.includes('board');
+              } else if (isBiologyNeet) {
+                // NEET Biology: must have "neet" or "core" in the subject
+                return sl.includes('neet') || sl.includes('core');
+              } else {
+                // Generic "Biology" exam with no variant qualifier:
+                // only include from primary batch (no variant specified, so we can't cross-match)
+                return isPrimaryBatch;
+              }
             });
 
-            if (hasMatchingSubject) return true;
+            if (hasBiologySubject) return true;
 
-            // If it's their primary batch, include unless they explicitly excluded this base subject
-            return isPrimaryBatch && !subjects.some(s => getBaseSubject(s) === examBaseSubj);
+            // Primary batch student whose subjects_taken is empty → include (they're fully in this batch)
+            if (isPrimaryBatch && subjects.length === 0) return true;
+
+            // Primary batch student who has subjects but none are biology → include
+            // (biology wasn't listed as additional, they just attend the primary batch)
+            if (isPrimaryBatch && !subjects.some(s => s.toLowerCase().includes('bio'))) return true;
+
+            return false;
+
+          } else {
+            // ── Non-biology exams: primary batch only ────────────────────────
+            return isPrimaryBatch;
           }
-
-          // If subjects_taken is empty, default to primary batch enrollment
-          return isPrimaryBatch;
         });
+
 
         // 4. Merge results with enrollments
         const mergedResults: ResultRecord[] = enrolledStudents.map((e: any) => {
