@@ -179,7 +179,8 @@ export default function ExamsPage() {
               student_code
             ),
             batches (
-              name
+              name,
+              class
             )
           `)
           .eq('branch_id', currentBranch.id)
@@ -200,13 +201,28 @@ export default function ExamsPage() {
           return base;
         };
 
+        // Class level extraction helper (e.g. '11' or '12')
+        const getClassLevel = (batchClass?: string, batchName?: string): string => {
+          const str = `${batchClass || ''} ${batchName || ''}`.trim();
+          const match = str.match(/\b(11|12|7|8|9|10)\b/);
+          return match ? match[1] : '';
+        };
+
         const examBatchId = selectedExam.batchId;
         const examSubject = selectedExam.subjectName;
         const examBaseSubj = getBaseSubject(examSubject);
+        const examClassLevel = getClassLevel('', selectedExam.batchName);
 
-        // 3. Filter enrollments: include primary batch students, or cross-enrolled students taking this subject
+        // 3. Filter enrollments: include primary batch students, or cross-enrolled students of the same class taking this subject
         const enrolledStudents = (dbEnrollments || []).filter((e: any) => {
           const isPrimaryBatch = e.batch_id === examBatchId;
+          const studentClassLevel = getClassLevel(e.batches?.class, e.batches?.name);
+
+          // Class level isolation: Class 12 students can NEVER appear in Class 11 exams & vice-versa
+          if (examClassLevel && studentClassLevel && examClassLevel !== studentClassLevel) {
+            return false;
+          }
+
           const subjects: string[] = e.subjects_taken || [];
 
           if (subjects.length > 0) {
